@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Andamentos - Caso #{{ caso.id }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.5cm;
+        }
+        body {
+            font-family: 'Helvetica', sans-serif;
+            font-size: 10pt;
+            color: #333;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 25px;
+        }
+        .header img {
+            max-height: 50px;
+            max-width: 150px;
+        }
+        .header h1 {
+            font-size: 18pt;
+            margin: 0;
+            text-align: right;
+            color: #000;
+        }
+        .details {
+            margin-bottom: 25px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 5px;
+        }
+        h2 {
+            font-size: 14pt;
+            margin-top: 0;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        .details p {
+            margin: 5px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+            /* Permite a quebra de palavras longas na descrição */
+            word-wrap: break-word;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        /* Define a largura das colunas */
+        .col-data { width: 18%; }
+        .col-user { width: 22%; }
+        .col-desc { width: 60%; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        {% if logo_url %}
+            <img src="{{ logo_url }}" alt="Logo">
+        {% else %}
+            <span></span> <!-- Espaço reservado se não houver logo -->
+        {% endif %}
+        <h1>Relatório de Andamentos</h1>
+    </div>
+    
+    <div class="details">
+        <h2>Detalhes do Caso</h2>
+        <p><strong>ID do Caso:</strong> #{{ caso.id }}</p>
+        <p><strong>Título:</strong> {{ caso.titulo_caso }}</p>
+        <p><strong>Cliente:</strong> {{ caso.cliente }}</p>
+    </div>
+    
+    <h2>Histórico de Andamentos</h2>
+    <table>
+        <thead>
+            <tr>
+                <th class="col-data">Data</th>
+                <th class="col-user">Usuário</th>
+                <th class="col-desc">Descrição</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for andamento in andamentos %}
+            <tr>
+                <td>{{ andamento.data_andamento|date:"d/m/Y" }}</td>
+                <td>{{ andamento.usuario_criacao.get_full_name|default:andamento.usuario_criacao.username|default:"Sistema" }}</td>
+                <td>{{ andamento.descricao|linebreaksbr }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="3" style="text-align: center;">Nenhum andamento encontrado.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

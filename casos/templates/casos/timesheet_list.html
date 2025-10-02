@@ -1,0 +1,54 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<!-- Formulário de Filtros -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Profissional</label>
+                <select name="profissional" class="form-select">
+                    <option value="">Todos</option>
+                    {% for user in profissionais %}<option value="{{ user.id }}" {% if request.GET.profissional == user.id|stringformat:"s" %}selected{% endif %}>{{ user.username }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">De:</label>
+                <input type="date" name="data_de" class="form-control" value="{{ request.GET.data_de }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Até:</label>
+                <input type="date" name="data_ate" class="form-control" value="{{ request.GET.data_ate }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tabela de Resultados -->
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead class="table-dark">
+            <tr><th>Data</th><th>Profissional</th><th>Caso</th><th>Tempo</th><th>Descrição</th></tr>
+        </thead>
+        <tbody>
+            {% for ts in timesheets %}
+            <tr>
+                <td>{{ ts.data_execucao|date:"d/m/Y" }}</td>
+                <td>{{ ts.profissional.username }}</td>
+                <td><a href="{% url 'caso_detail' ts.caso.pk %}#timesheet-tab-pane">{{ ts.caso.titulo_caso }}</a></td>
+                <td>{{ ts.tempo }}</td>
+                <td>{{ ts.descricao|truncatewords:20 }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center">Nenhum lançamento encontrado.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

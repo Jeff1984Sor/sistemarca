@@ -1,0 +1,25 @@
+{% extends 'core/base.html' %}
+{% block title %}Gestão de Ativos{% endblock %}
+{% block page_title %}Equipamentos Cadastrados{% endblock %}
+{% block content %}
+  <a href="{% url 'equipamentos:equipamento_create' %}" class="btn btn-primary mb-3">Novo Equipamento</a>
+  <table class="table table-hover">
+    <thead><tr><th>Nº Item</th><th>Tipo</th><th>Marca/Modelo</th><th>Posse</th><th>Usuário</th><th>Ações</th></tr></thead>
+    <tbody>
+      {% for item in equipamentos %}
+      <tr>
+        <td>{{ item.numero_item }}</td>
+        <td>{{ item.tipo_item.nome }}</td>
+        <td>{{ item.marca.nome }} / {{ item.modelo }}</td>
+        <td>{{ item.get_posse_status_display }}</td>
+        <td>{{ item.posse_usuario.username|default:"-" }}</td>
+        <td>
+          <a href="{% url 'equipamentos:equipamento_detail' item.pk %}" class="btn btn-info btn-sm">👁️</a>
+          <a href="{% url 'equipamentos:equipamento_update' item.pk %}" class="btn btn-warning btn-sm">✏️</a>
+          <a href="{% url 'equipamentos:equipamento_delete' item.pk %}" class="btn btn-danger btn-sm">🗑️</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

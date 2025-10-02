@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Novo Caso Cadastrado</title>
+</head>
+<body style="font-family: sans-serif;">
+    <h2>Novo Caso Cadastrado no Sistema Aureon</h2>
+    <p>Olá,</p>
+    <p>Um novo caso foi cadastrado no sistema pelo usuário <strong>{{ usuario.username }}</strong>.</p>
+    <hr>
+    <h3>Detalhes do Caso</h3>
+    <ul>
+        <li><strong>ID do Caso:</strong> #{{ caso.id }}</li>
+        <li><strong>Título:</strong> {{ caso.titulo_caso }}</li>
+        <li><strong>Cliente:</strong> {{ caso.cliente.nome_razao_social }}</li>
+        <li><strong>Status:</strong> {{ caso.status.nome }}</li>
+        <li><strong>Data de Entrada:</strong> {{ caso.data_entrada|date:"d/m/Y" }}</li>
+    </ul>
+    <hr>
+    <p>Por favor, acesse o sistema para mais detalhes.</p>
+    <p><em>Esta é uma mensagem automática.</em></p>
+</body>
+</html>

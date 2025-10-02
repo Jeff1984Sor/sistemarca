@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Aureon - {% block title %}Dashboard{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    {% if tema_ativo %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family={{ tema_ativo.fonte_principal|urlencode }}:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bs-primary: {{ tema_ativo.cor_primaria }};
+            --bs-primary-rgb: {{ tema_ativo.cor_primaria.red }}, {{ tema_ativo.cor_primaria.green }}, {{ tema_ativo.cor_primaria.blue }};
+            --bs-success: {{ tema_ativo.cor_sucesso }};
+            --bs-danger: {{ tema_ativo.cor_perigo }};
+            --bs-body-font-family: '{{ tema_ativo.fonte_principal }}', sans-serif;
+        }
+        .bg-dark {
+            background-color: {{ tema_ativo.cor_barra_nav }} !important;
+        }
+    </style>
+    {% endif %}
+    
+    <style>
+        body {
+            padding-top: 56px;
+            background-color: #f8f9fa;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top shadow-sm">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="{% url 'home' %}">
+                    {% if logo_url_global %}<img src="{{ logo_url_global }}" alt="Logo" style="max-height: 30px; width: auto;">{% else %}Sistema de Gestão{% endif %}
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-navbar" aria-controls="main-navbar" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="main-navbar">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        <li class="nav-item"><a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door me-1"></i> Início</a></li>
+                        {% if 'clientes' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'clientes:cliente_list' %}"><i class="bi bi-people me-1"></i> Clientes</a></li>{% endif %}
+                        {% if 'equipamentos' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'equipamentos:equipamento_list' %}"><i class="bi bi-laptop me-1"></i> Equipamentos</a></li>{% endif %}
+                        <li class="nav-item"><span class="nav-link disabled mx-2">|</span></li>
+                        {% if 'casos' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'casos:caso_list' %}">Casos</a></li>{% endif %}
+                        {% if 'pesquisa-casos' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'casos:caso_pesquisa' %}">Pesquisa</a></li>{% endif %}
+                        {% if 'kanban' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'casos:kanban_board' %}">Kanban</a></li>{% endif %}
+                        {% if 'tarefas' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'casos:tarefa_list_all' %}">Tarefas</a></li>{% endif %}
+                        {% if 'timesheet' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'casos:timesheet_list_all' %}">Timesheet</a></li>{% endif %}
+                    </ul>
+                    <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                         <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                               
+                                <span>{{ user.get_full_name|default:user.username }}</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="{% url 'contas:perfil' %}">Meu Perfil</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><form class="d-inline" method="post" action="{% url 'contas:logout' %}">{% csrf_token %}<button type="submit" class="dropdown-item">Sair</button></form></li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container-fluid my-4">
+        <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pb-2 mb-3 border-bottom">
+            <h1 class="h2">{% block page_title %}{% endblock %}</h1>
+        </div>
+        {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>{% endfor %}{% endif %}
+        {% block content %}{% endblock %}
+    </main>
+
+    <div class="modal fade" id="addGenericModal" tabindex="-1" aria-labelledby="addGenericModalLabel" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h1 class="modal-title fs-5" id="addGenericModalLabel">Adicionar Novo Item</h1><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><form id="add-generic-form" onsubmit="return false;"><div class="mb-3"><label for="new-generic-name" class="form-label">Nome</label><input type="text" class="form-control" id="new-generic-name" required></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary" id="save-new-generic-item">Salvar</button></div></div></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/imask"></script>
+    {% block scripts %}
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const genericModalElement = document.getElementById('addGenericModal');
+                if (genericModalElement) {
+                    const genericModal = new bootstrap.Modal(genericModalElement);
+                    const modalTitle = document.getElementById('addGenericModalLabel');
+                    const modalInputLabel = genericModalElement.querySelector('.form-label');
+                    const modalInput = document.getElementById('new-generic-name');
+                    const saveButton = document.getElementById('save-new-generic-item');
+                    let currentFieldSelect = null;
+                    let currentUrl = '';
+                    genericModalElement.addEventListener('show.bs.modal', function(event) {
+                        const button = event.relatedTarget;
+                        const fieldName = button.getAttribute('data-field-name');
+                        const fieldLabel = button.getAttribute('data-field-label');
+                        currentUrl = button.getAttribute('data-url');
+                        currentFieldSelect = document.querySelector(`[name="${fieldName}"]`);
+                        modalTitle.textContent = `Adicionar Novo ${fieldLabel}`;
+                        modalInputLabel.textContent = `Nome do ${fieldLabel}`;
+                        modalInput.value = '';
+                        setTimeout(() => modalInput.focus(), 500);
+                    });
+                    function saveItem() {
+                        const itemName = modalInput.value;
+                        if (!itemName) { return; }
+                        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                        fetch(currentUrl, {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: `nome=${encodeURIComponent(itemName)}`
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.id && data.nome) {
+                                const newOption = new Option(data.nome, data.id, true, true);
+                                currentFieldSelect.add(newOption);
+                                genericModal.hide();
+                            } else {
+                                alert('Ocorreu um erro: ' + (data.error || 'Erro desconhecido'));
+                            }
+                        })
+                        .catch(error => console.error('Erro no Fetch:', error));
+                    }
+                    saveButton.addEventListener('click', saveItem);
+                    modalInput.addEventListener('keypress', function(event) {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            saveItem();
+                        }
+                    });
+                }
+            });
+        </script>
+    {% endblock %}
+</body>
+</html>

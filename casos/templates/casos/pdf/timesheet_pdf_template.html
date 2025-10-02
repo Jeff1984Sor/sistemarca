@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Timesheet - Caso #{{ caso.id }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.5cm; /* Margens da página */
+        }
+        body {
+            font-family: 'Helvetica', sans-serif;
+            font-size: 10pt;
+            color: #333;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        .header img {
+            max-height: 60px; /* Ajuste o tamanho do seu logo */
+            max-width: 180px;
+        }
+        .header h1 {
+            font-size: 18pt;
+            margin: 0;
+            text-align: right;
+            color: #000;
+        }
+        .details {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 5px;
+        }
+        .details p {
+            margin: 5px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        /* Ajusta a largura das colunas */
+        .col-data { width: 15%; }
+        .col-prof { width: 25%; }
+        .col-tempo { width: 15%; }
+        .col-desc { width: 45%; }
+
+        /* Tabela de totais no final */
+        .totals-table {
+            width: 40%;
+            float: right; /* Alinha a tabela à direita */
+            margin-top: 20px;
+        }
+        .totals-table td {
+            border: 1px solid #ccc;
+        }
+        .totals-table .label {
+            text-align: right;
+            font-weight: bold;
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        {% if logo_url %}
+            <img src="{{ logo_url }}" alt="Logo da Empresa">
+        {% endif %}
+        <h1>Relatório de Horas</h1>
+    </div>
+    
+    <div class="details">
+        <h2>Detalhes do Caso</h2>
+        <p><strong>ID do Caso:</strong> #{{ caso.id }}</p>
+        <p><strong>Título:</strong> {{ caso.titulo_caso }}</p>
+        <p><strong>Cliente:</strong> {{ caso.cliente }}</p>
+    </div>
+    
+    <h2>Lançamentos</h2>
+    <table>
+        <thead>
+            <tr>
+                <th class="col-data">Data</th>
+                <th class="col-prof">Profissional</th>
+                <th class="col-tempo">Tempo</th>
+                <th class="col-desc">Descrição</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ts in timesheets %}
+            <tr>
+                <td>{{ ts.data_execucao|date:"d/m/Y" }}</td>
+                <td>{{ ts.profissional.get_full_name|default:ts.profissional.username }}</td>
+                <td>{{ ts.tempo }}</td>
+                <td>{{ ts.descricao }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" style="text-align: center;">Nenhum lançamento encontrado.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Tabela de Totais alinhada à direita -->
+    <table class="totals-table">
+        <tr>
+            <td class="label">Total de Horas:</td>
+            <td>{{ total_horas }}</td>
+        </tr>
+    </table>
+</body>
+</html>

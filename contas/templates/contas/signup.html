@@ -1,0 +1,44 @@
+{% extends 'core/base_fullscreen.html' %}
+
+{% block title %}Cadastro{% endblock %}
+
+{% block body_content %}
+<div class="container">
+    <div class="row justify-content-center align-items-center" style="min-height: 100vh;">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-lg">
+                <div class="card-body p-4 p-md-5">
+                    
+                    <div class="text-center mb-4">
+                        <h2 class="mt-2">Crie sua Conta na Aureon</h2>
+                        <p class="text-muted">Preencha os campos abaixo para começar.</p>
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <!-- Loop para renderizar os campos com estilo Bootstrap -->
+                        {% for field in form %}
+                            <div class="form-floating mb-3">
+                                {{ field }}
+                                {{ field.label_tag }}
+                            </div>
+                            {% for error in field.errors %}
+                                <div class="alert alert-danger p-2">{{ error }}</div>
+                            {% endfor %}
+                        {% endfor %}
+                        
+                        <div class="d-grid mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">Cadastrar</button>
+                        </div>
+                    </form>
+
+                    <div class="text-center mt-4">
+                        <p class="mb-0">Já tem uma conta? <a href="{% url 'login' %}">Faça o login aqui</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

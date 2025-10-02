@@ -1,0 +1,85 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{% if form.instance.pk %}Editar Equipamento{% else %}Adicionar Equipamento{% endif %}{% endblock %}
+{% block page_title %}{% if form.instance.pk %}Editar Equipamento #{{ form.instance.pk }}{% else %}Adicionar Novo Equipamento{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-6">{{ form.numero_item.label_tag }}{{ form.numero_item }}</div>
+                <div class="col-md-6">{{ form.modelo.label_tag }}{{ form.modelo }}</div>
+
+                <!-- Tipo do Item -->
+                <div class="col-md-6">
+                    {{ form.tipo_item.label_tag }}
+                    <div class="input-group">
+                        {{ form.tipo_item }}
+                        <button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#addGenericModal"
+                                data-field-name="tipo_item" data-field-label="Tipo do Item" data-url="{% url 'equipamentos:add_tipo_item_ajax' %}">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Categoria do Item -->
+                <div class="col-md-6">
+                    {{ form.categoria_item.label_tag }}
+                    <div class="input-group">
+                        {{ form.categoria_item }}
+                        <button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#addGenericModal"
+                                data-field-name="categoria_item" data-field-label="Categoria do Item" data-url="{% url 'equipamentos:add_categoria_item_ajax' %}">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Marca -->
+                <div class="col-md-6">
+                    {{ form.marca.label_tag }}
+                    <div class="input-group">
+                        {{ form.marca }}
+                        <button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#addGenericModal"
+                                data-field-name="marca" data-field-label="Marca" data-url="{% url 'equipamentos:add_marca_ajax' %}">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status do Item - CORRIGIDO -->
+                <div class="col-md-6">
+                    {{ form.status_item.label_tag }}
+                    <div class="input-group">
+                        {{ form.status_item }}
+                        <button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#addGenericModal"
+                                data-field-name="status_item" data-field-label="Status do Item" data-url="{% url 'equipamentos:add_status_item_ajax' %}">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <hr class="my-4">
+
+                <div class="col-md-6">{{ form.data_compra.label_tag }}{{ form.data_compra }}</div>
+                <div class="col-md-6">{{ form.valor_pago.label_tag }}{{ form.valor_pago }}</div>
+                <div class="col-md-6">{{ form.local_compra.label_tag }}{{ form.local_compra }}</div>
+                <div class="col-md-6">{{ form.pago_por.label_tag }}{{ form.pago_por }}</div>
+
+                <hr class="my-4">
+
+                <div class="col-md-6">{{ form.posse_status.label_tag }}{{ form.posse_status }}</div>
+                <div class="col-md-6">{{ form.posse_usuario.label_tag }}{{ form.posse_usuario }}</div>
+                <div class="col-md-6">{{ form.telefone_usuario.label_tag }}{{ form.telefone_usuario }}</div>
+            </div>
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary">Salvar Equipamento</button>
+                <!-- Link de Cancelar - CORRIGIDO -->
+                <a href="{% url 'equipamentos:equipamento_list' %}" class="btn btn-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

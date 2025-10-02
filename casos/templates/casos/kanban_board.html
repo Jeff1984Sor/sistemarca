@@ -1,0 +1,137 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Kanban de Casos por Fase{% endblock %}
+{% block page_title %}Kanban de Casos por Fase{% endblock %}
+
+{% block content %}
+<!-- Filtros (não precisam de alteração) -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" action="{% url 'casos:kanban_board' %}" class="row align-items-end">
+            <div class="col-md-4">
+                <label for="profissional" class="form-label">Filtrar por Profissional</label>
+                <select name="profissional" id="profissional" class="form-select">
+                    <option value="">Todos</option>
+                    {% for user in profissionais %}<option value="{{ user.id }}" {% if request.GET.profissional == user.id|stringformat:"s" %}selected{% endif %}>{{ user.get_full_name|default:user.username }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="status" class="form-label">Filtrar por Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">Todos</option>
+                    {% for status_item in status_list %}<option value="{{ status_item.id }}" {% if request.GET.status == status_item.id|stringformat:"s" %}selected{% endif %}>{{ status_item.nome }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-primary">Filtrar</button>
+                <a href="{% url 'casos:kanban_board' %}" class="btn btn-secondary">Limpar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ====================================================== -->
+<!-- CONTAINER DO KANBAN COM LAYOUT HORIZONTAL              -->
+<!-- ====================================================== -->
+<div class="kanban-container">
+    {% for fase, casos_na_fase in kanban_columns.items %}
+    <div class="kanban-column">
+        <div class="kanban-column-header">
+            <h6 class="mb-0">{{ fase.nome }}</h6>
+            <span class="badge bg-secondary rounded-pill">{{ casos_na_fase|length }}</span>
+        </div>
+        <div class="kanban-column-body" data-fase-id="{{ fase.id }}">
+            {% for caso in casos_na_fase %}
+            <div class="kanban-card" data-caso-id="{{ caso.id }}">
+                <a href="{% url 'casos:caso_detail' caso.pk %}" class="kanban-card-link">
+                    <div class="card mb-2">
+                        <div class="card-body p-2">
+                            <p class="card-title fw-bold mb-1">Caso #{{ caso.id }}</p>
+                            <p class="card-text small text-muted mb-1">{{ caso.titulo_caso|truncatechars:50 }}</p>
+                            <p class="card-text small text-muted mb-0"><i class="bi bi-person"></i> {{ caso.cliente }}</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% empty %}
+    <p class="text-muted">Nenhum workflow configurado ou nenhuma fase encontrada.</p>
+    {% endfor %}
+</div>
+
+<!-- ====================================================== -->
+<!-- CSS QUE CRIA A MÁGICA DAS COLUNAS                      -->
+<!-- ====================================================== -->
+<style>
+    .kanban-container {
+        display: flex;         /* ATIVA O MODO FLEXBOX */
+        overflow-x: auto;      /* Permite rolagem horizontal se as colunas não couberem */
+        gap: 1rem;             /* Espaçamento entre as colunas */
+        padding-bottom: 1rem;  /* Espaço para a barra de rolagem não ficar colada */
+    }
+    .kanban-column {
+        flex: 0 0 320px;       /* Define uma largura fixa para cada coluna (não encolhe, não estica) */
+        min-width: 320px;
+        background-color: #f0f2f5;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+    }
+    .kanban-column-header {
+        padding: 0.75rem 1rem;
+        background-color: #e9ecef;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+    }
+    .kanban-column-body {
+        padding: 0.5rem;
+        height: 65vh;          /* Altura da área dos cards */
+        overflow-y: auto;      /* Permite rolagem vertical dentro da coluna se houver muitos cards */
+    }
+    .kanban-card {
+        cursor: grab;
+        transition: box-shadow 0.2s ease-in-out;
+    }
+    .kanban-card:hover {
+        border-color: #0d6efd;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .kanban-card-link {
+        text-decoration: none;
+        color: inherit;
+    }
+    .blue-background-class { /* Classe para o "fantasma" do card ao arrastar */
+        background-color: #cfe2ff;
+        border: 1px dashed #0d6efd;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<!-- Inclui a biblioteca SortableJS para o drag-and-drop -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+<script>
+// Seu script do SortableJS para o drag-and-drop (já deve estar correto)
+document.addEventListener('DOMContentLoaded', function() {
+    const columns = document.querySelectorAll('.kanban-column-body');
+    columns.forEach(column => {
+        new Sortable(column, {
+            group: 'kanban',
+            animation: 150,
+            ghostClass: 'blue-background-class',
+            onEnd: function (evt) {
+                // ... (sua lógica AJAX para salvar a mudança de fase)
+            },
+        });
+    });
+});
+</script>
+{% endblock %}

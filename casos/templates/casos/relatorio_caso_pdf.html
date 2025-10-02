@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório do Caso #{{ caso.id }}</title>
+    <style>
+        body { font-family: sans-serif; font-size: 12px; }
+        h1 { color: #333; } h2 { color: #555; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Relatório do Caso #{{ caso.id }}: {{ caso.titulo_caso }}</h1>
+    <p><strong>Cliente:</strong> {{ caso.cliente.nome_razao_social }}</p>
+    <p><strong>Status:</strong> {{ caso.status.nome }}</p>
+
+    <h2>Timesheet</h2>
+    <table>
+        <thead><tr><th>Data</th><th>Profissional</th><th>Tempo</th><th>Descrição</th></tr></thead>
+        <tbody>
+        {% for ts in caso.timesheets.all %}
+            <tr>
+                <td>{{ ts.data_execucao|date:"d/m/Y" }}</td>
+                <td>{{ ts.profissional.username }}</td>
+                <td>{{ ts.tempo }}</td>
+                <td>{{ ts.descricao }}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="4">Nenhum lançamento de horas.</td></tr>
+        {% endfor %}
+        <tr><td colspan="2"></td><td><strong>Total:</strong></td><td><strong>{{ caso.total_horas_trabalhadas }}</strong></td></tr>
+        </tbody>
+    </table>
+</body>
+</html>

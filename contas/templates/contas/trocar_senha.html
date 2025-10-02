@@ -1,0 +1,18 @@
+<!-- contas/templates/contas/trocar_senha.html -->
+{% extends 'core/base.html' %}
+
+{% block title %}Alterar Senha{% endblock %}
+{% block page_title %}Alterar Senha{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit" class="btn btn-primary">Salvar Nova Senha</button>
+            <a href="{% url 'contas:perfil' %}" class="btn btn-secondary">Cancelar</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

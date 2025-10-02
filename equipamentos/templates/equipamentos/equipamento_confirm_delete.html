@@ -1,0 +1,20 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Confirmar Exclusão{% endblock %}
+{% block page_title %}Confirmar Exclusão de Equipamento{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Atenção!</h5>
+        <p>Você tem certeza que deseja deletar o equipamento "<strong>{{ object }}</strong>"?</p>
+        <p class="text-danger">Esta ação não pode ser desfeita.</p>
+        
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Sim, tenho certeza</button>
+            <a href="{% url 'equipamentos:equipamento_detail' object.pk %}" class="btn btn-secondary">Cancelar</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

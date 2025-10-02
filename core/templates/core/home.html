@@ -1,0 +1,134 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard Principal{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h6 class="m-0 fw-bold text-primary">Placar de Entradas por Cliente/Produto ({{ ano_atual }})</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm text-center">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-start">Cliente - Produto</th>
+                                {% for mes in nomes_meses %}<th>{{ mes }}</th>{% endfor %}
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for linha in tabela_entradas %}
+                            <tr>
+                                <td class="text-start fw-bold">{{ linha.chave }}</td>
+                                {% for valor in linha.valores_mes %}<td>{{ valor }}</td>{% endfor %}
+                                <td class="fw-bold table-light">{{ linha.total_linha }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="14" class="text-center text-muted">Nenhum caso com data de entrada registrada este ano.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-primary fw-bold">
+                                <td class="text-start">Total do Mês</td>
+                                {% for total_mes in totais_por_mes %}<td>{{ total_mes }}</td>{% endfor %}
+                                <td>{{ total_geral_entradas }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header py-3"><h6 class="m-0 fw-bold text-primary">Minhas Tarefas para Hoje</h6></div>
+            <div class="list-group list-group-flush">
+                {% for tarefa in minhas_tarefas_pendentes %}
+                    <a href="{% url 'casos:caso_detail' tarefa.caso.pk %}#tarefas-tab-pane" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">{{ tarefa.tipo_tarefa.nome }}</h6>
+                            <small class="text-danger">Prazo: Hoje</small>
+                        </div>
+                        <p class="mb-1 small text-muted"><strong>Caso:</strong> {{ tarefa.caso.titulo_caso|truncatechars:60 }}</p>
+                    </a>
+                {% empty %}
+                    <div class="list-group-item text-success"><i class="bi bi-check-circle-fill"></i> Nenhuma tarefa com prazo para hoje!</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header py-3"><h6 class="m-0 fw-bold text-primary">Placar da Meta (Casos Encerrados)</h6></div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless text-center">
+                    <thead><tr><th>Mês</th><th>Quantidade</th></tr></thead>
+                    <tbody>
+                        {% for item in placar_da_meta %}
+                        <tr><td>{{ item.mes_str }}</td><td><span class="badge bg-success rounded-pill px-3">{{ item.total }}</span></td></tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="border-top"><td class="text-end fw-bold">Total no Semestre:</td><td class="fw-bold"><span class="badge bg-primary rounded-pill px-3 fs-6">{{ total_semestre }}</span></td></tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h4 class="mt-4">Visão Geral dos Casos</h4>
+<hr class="mb-4">
+
+<div class="row">
+    <div class="col-xl-6 mb-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header py-3"><h6 class="m-0 fw-bold text-primary">Casos por Status</h6></div>
+            <div class="card-body"><canvas id="graficoStatus"></canvas></div>
+        </div>
+    </div>
+    <div class="col-xl-6 mb-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header py-3"><h6 class="m-0 fw-bold text-primary">Casos por Advogado</h6></div>
+            <div class="card-body"><canvas id="graficoAdvogado"></canvas></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const defaultColors = {
+        bg: ['rgba(54, 162, 235, 0.5)', 'rgba(255, 99, 132, 0.5)', 'rgba(255, 206, 86, 0.5)', 'rgba(75, 192, 192, 0.5)', 'rgba(153, 102, 255, 0.5)', 'rgba(255, 159, 64, 0.5)'],
+        border: ['rgba(54, 162, 235, 1)', 'rgba(255, 99, 132, 1)', 'rgba(255, 206, 86, 1)', 'rgba(75, 192, 192, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)']
+    };
+    const chartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'top' } } };
+
+    const dadosStatus = JSON.parse('{{ dados_grafico_status_json|safe|default:"{}" }}');
+    if (document.getElementById('graficoStatus') && dadosStatus.labels) {
+        new Chart(document.getElementById('graficoStatus'), {
+            type: 'pie', data: { labels: dadosStatus.labels, datasets: [{ data: dadosStatus.data, backgroundColor: defaultColors.bg, borderColor: defaultColors.border }] }, options: chartOptions
+        });
+    }
+
+    const dadosAdvogado = JSON.parse('{{ dados_grafico_advogado_json|safe|default:"{}" }}');
+    if (document.getElementById('graficoAdvogado') && dadosAdvogado.labels) {
+        new Chart(document.getElementById('graficoAdvogado'), {
+            type: 'bar', data: { labels: dadosAdvogado.labels, datasets: [{ label: 'Nº de Casos', data: dadosAdvogado.data, backgroundColor: defaultColors.bg[0], borderColor: defaultColors.border[0] }] }, options: chartOptions
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,12 @@
+<!-- contas/templates/contas/trocar_senha_done.html -->
+{% extends 'core/base.html' %}
+
+{% block title %}Senha Alterada{% endblock %}
+{% block page_title %}Senha Alterada com Sucesso{% endblock %}
+
+{% block content %}
+<div class="alert alert-success">
+    <p>Sua senha foi alterada com sucesso!</p>
+</div>
+<a href="{% url 'contas:perfil' %}" class="btn btn-primary">Voltar para o Perfil</a>
+{% endblock %}

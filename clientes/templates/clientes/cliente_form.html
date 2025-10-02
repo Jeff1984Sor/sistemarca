@@ -1,0 +1,170 @@
+{% extends 'core/base.html' %}
+
+{% block extra_head %}
+<!-- Adiciona o CSS do Leaflet no <head> da página -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+{% endblock %}
+
+{% block title %}{{ titulo|default:"Formulário de Cliente" }}{% endblock %}
+{% block page_title %}{{ titulo|default:"Formulário de Cliente" }}{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body p-4">
+        <form method="post">
+            {% csrf_token %}
+            {% if form.errors %}<div class="alert alert-danger">{{ form.errors }}</div>{% endif %}
+
+            <h5 class="border-bottom pb-2 mb-3">Identificação</h5>
+            <div class="row g-3">
+                <div class="col-md-6"><label for="{{ form.tipo_pessoa.id_for_label }}" class="form-label">{{ form.tipo_pessoa.label }}</label>{{ form.tipo_pessoa }}</div>
+                <div class="col-md-6"><label for="{{ form.nome_razao_social.id_for_label }}" class="form-label">{{ form.nome_razao_social.label }}</label>{{ form.nome_razao_social }}</div>
+                <div class="col-md-6"><label for="{{ form.email.id_for_label }}" class="form-label">{{ form.email.label }}</label>{{ form.email }}</div>
+                <div class="col-md-6"><label for="{{ form.telefone.id_for_label }}" class="form-label">{{ form.telefone.label }}</label>{{ form.telefone }}</div>
+            </div>
+
+            <div id="pj-fields" style="display: none;">
+                <h5 class="mt-4 border-bottom pb-2 mb-3">Dados de Pessoa Jurídica</h5>
+                <div class="row g-3">
+                    <div class="col-md-6"><label for="{{ form.cnpj.id_for_label }}" class="form-label">{{ form.cnpj.label }}</label>{{ form.cnpj }}</div>
+                    <div class="col-md-6"><label for="{{ form.inscricao_estadual.id_for_label }}" class="form-label">{{ form.inscricao_estadual.label }}</label>{{ form.inscricao_estadual }}</div>
+                </div>
+            </div>
+
+            <div id="pf-fields" style="display: none;">
+                <h5 class="mt-4 border-bottom pb-2 mb-3">Dados de Pessoa Física</h5>
+                <div class="row g-3">
+                    <div class="col-md-6"><label for="{{ form.cpf.id_for_label }}" class="form-label">{{ form.cpf.label }}</label>{{ form.cpf }}</div>
+                    <div class="col-md-6"><label for="{{ form.rg.id_for_label }}" class="form-label">{{ form.rg.label }}</label>{{ form.rg }}</div>
+                    <div class="col-md-4"><label for="{{ form.nacionalidade.id_for_label }}" class="form-label">{{ form.nacionalidade.label }}</label><div class="input-group">{{ form.nacionalidade }}<button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#addGenericModal" data-field-name="nacionalidade" data-field-label="Nacionalidade" data-url="{% url 'clientes:add_nacionalidade_ajax' %}"><i class="bi bi-plus-lg"></i></button></div></div>
+                    <div class="col-md-4"><label for="{{ form.estado_civil.id_for_label }}" class="form-label">{{ form.estado_civil.label }}</label><div class="input-group">{{ form.estado_civil }}<button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#addGenericModal" data-field-name="estado_civil" data-field-label="Estado Civil" data-url="{% url 'clientes:add_estado_civil_ajax' %}"><i class="bi bi-plus-lg"></i></button></div></div>
+                    <div class="col-md-4"><label for="{{ form.profissao.id_for_label }}" class="form-label">{{ form.profissao.label }}</label><div class="input-group">{{ form.profissao }}<button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#addGenericModal" data-field-name="profissao" data-field-label="Profissão" data-url="{% url 'clientes:add_profissao_ajax' %}"><i class="bi bi-plus-lg"></i></button></div></div>
+                </div>
+            </div>
+            
+            <h5 class="mt-4 border-bottom pb-2 mb-3">Endereço</h5>
+            <div class="row g-3">
+                <div class="col-md-3"><label for="{{ form.cep.id_for_label }}" class="form-label">{{ form.cep.label }}</label>{{ form.cep }}</div>
+                <div class="col-md-7"><label for="{{ form.logradouro.id_for_label }}" class="form-label">{{ form.logradouro.label }}</label>{{ form.logradouro }}</div>
+                <div class="col-md-2"><label for="{{ form.numero.id_for_label }}" class="form-label">{{ form.numero.label }}</label>{{ form.numero }}</div>
+                <div class="col-md-4"><label for="{{ form.complemento.id_for_label }}" class="form-label">{{ form.complemento.label }}</label>{{ form.complemento }}</div>
+                <div class="col-md-4"><label for="{{ form.bairro.id_for_label }}" class="form-label">{{ form.bairro.label }}</label>{{ form.bairro }}</div>
+                <div class="col-md-3"><label for="{{ form.cidade.id_for_label }}" class="form-label">{{ form.cidade.label }}</label>{{ form.cidade }}</div>
+                <div class="col-md-1"><label for="{{ form.uf.id_for_label }}" class="form-label">{{ form.uf.label }}</label>{{ form.uf }}</div>
+                {{ form.latitude }}{{ form.longitude }}
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header">Localização no Mapa</div>
+                <div class="card-body p-0">
+                    <div id="map" style="height: 350px; width: 100%;"></div>
+                </div>
+                <div class="card-footer text-muted small">Arraste o marcador para ajustar a localização.</div>
+            </div>
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary">Salvar Cliente</button>
+                <a href="{% url 'clientes:cliente_list' %}" class="btn btn-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<!-- Adiciona o JavaScript do Leaflet -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Lógica para mostrar/esconder campos PF/PJ (continua a mesma)
+        const tipoPessoaField = document.getElementById('id_tipo_pessoa');
+        const pjFields = document.getElementById('pj-fields');
+        const pfFields = document.getElementById('pf-fields');
+        function toggleFields() {
+            if (tipoPessoaField.value === 'PF') {
+                pjFields.style.display = 'none';
+                pfFields.style.display = 'block';
+            } else {
+                pfFields.style.display = 'none';
+                pjFields.style.display = 'block';
+            }
+        }
+        toggleFields();
+        tipoPessoaField.addEventListener('change', toggleFields);
+    });
+</script>
+
+<script>
+    // Lógica do Mapa com Leaflet e OpenStreetMap
+    let map;
+    let marker;
+    const latField = document.getElementById('id_latitude');
+    const lonField = document.getElementById('id_longitude');
+
+    // 1. INICIALIZA O MAPA
+    function initMap() {
+        const lat = parseFloat(latField.value) || -14.2350; // Padrão: centro do Brasil
+        const lon = parseFloat(lonField.value) || -51.9253;
+        const zoom = (latField.value) ? 16 : 4; // Zoom maior se já tiver coordenada
+
+        map = L.map('map').setView([lat, lon], zoom);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        marker = L.marker([lat, lon], { draggable: true }).addTo(map);
+
+        marker.on('dragend', function(event) {
+            const position = marker.getLatLng();
+            latField.value = position.lat;
+            lonField.value = position.lng;
+        });
+    }
+
+    initMap(); // Chama a inicialização
+
+    // 2. BUSCA ENDEREÇO PELO CEP (VIA CEP) E ATUALIZA O MAPA (NOMINATIM)
+    document.getElementById('id_cep').addEventListener('blur', function(e) {
+        const cep = e.target.value.replace(/\D/g, '');
+        if (cep.length !== 8) return;
+
+        fetch(`https://viacep.com.br/ws/${cep}/json/`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.erro) {
+                    alert("CEP não encontrado.");
+                    return;
+                }
+                document.getElementById('id_logradouro').value = data.logradouro;
+                document.getElementById('id_bairro').value = data.bairro;
+                document.getElementById('id_cidade').value = data.localidade;
+                document.getElementById('id_uf').value = data.uf;
+
+                // Agora, usa o Nominatim para pegar as coordenadas
+                const address = `${data.logradouro}, ${data.localidade}, ${data.uf}, Brasil`;
+                const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+
+                fetch(nominatimUrl)
+                    .then(response => response.json())
+                    .then(geoData => {
+                        if (geoData && geoData.length > 0) {
+                            const lat = parseFloat(geoData[0].lat);
+                            const lon = parseFloat(geoData[0].lon);
+                            const newLatLng = new L.LatLng(lat, lon);
+
+                            map.setView(newLatLng, 16);
+                            marker.setLatLng(newLatLng);
+                            latField.value = lat;
+                            lonField.value = lon;
+                        } else {
+                            alert('Endereço não encontrado no mapa.');
+                        }
+                    });
+            });
+    });
+</script>
+{% endblock %}

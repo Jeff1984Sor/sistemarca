@@ -1,0 +1,73 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Detalhes do Equipamento{% endblock %}
+{% block page_title %}Detalhes do Equipamento: {{ equipamento.numero_item }}{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">{{ equipamento.tipo_item.nome }}: {{ equipamento.marca.nome }} {{ equipamento.modelo }}</h4>
+        <span class="badge bg-primary fs-6">{{ equipamento.status_item.nome }}</span>
+    </div>
+    <div class="card-body">
+        <div class="row g-4">
+            <!-- Coluna Esquerda: Detalhes do Item -->
+            <div class="col-md-6">
+                <h5>Especificações</h5>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item"><strong>Nº do Item / Etiqueta:</strong> {{ equipamento.numero_item }}</li>
+                    <li class="list-group-item"><strong>Tipo:</strong> {{ equipamento.tipo_item.nome }}</li>
+                    <li class="list-group-item"><strong>Categoria:</strong> {{ equipamento.categoria_item.nome }}</li>
+                    <li class="list-group-item"><strong>Marca:</strong> {{ equipamento.marca.nome }}</li>
+                    <li class="list-group-item"><strong>Modelo:</strong> {{ equipamento.modelo }}</li>
+                </ul>
+            </div>
+
+            <!-- Coluna Direita: Detalhes da Compra -->
+            <div class="col-md-6">
+                <h5>Informações de Aquisição</h5>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item"><strong>Data da Compra:</strong> {{ equipamento.data_compra|date:"d/m/Y" }}</li>
+                    <li class="list-group-item"><strong>Local da Compra / Loja:</strong> {{ equipamento.local_compra|default:"Não informado" }}</li>
+                    <li class="list-group-item"><strong>Valor Pago:</strong> R$ {{ equipamento.valor_pago|floatformat:2 }}</li>
+                    <li class="list-group-item"><strong>Pago Por:</strong> {{ equipamento.pago_por|default:"Não informado" }}</li>
+                </ul>
+            </div>
+
+            <div class="col-12"><hr></div>
+
+            <!-- Seção de Posse -->
+            <div class="col-12">
+                <h5>Posse e Contato</h5>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item">
+                        <strong>Posse Atual:</strong> 
+                        <span class="fw-bold">
+                            {% if equipamento.posse_status == 'EM_USO' %}
+                                Em Uso
+                            {% elif equipamento.posse_status == 'VENDER' %}
+                                Para Vender
+                            {% else %}
+                                Livre (Em Estoque)
+                            {% endif %}
+                        </span>
+                    </li>
+                    <li class="list-group-item">
+                        <strong>Em posse do Usuário:</strong> 
+                        {% if equipamento.posse_usuario %}
+                            {{ equipamento.posse_usuario.get_full_name|default:equipamento.posse_usuario.username }}
+                        {% else %}
+                            <span class="text-muted">Nenhum usuário</span>
+                        {% endif %}
+                    </li>
+                    <li class="list-group-item"><strong>Telefone de Contato do Usuário:</strong> {{ equipamento.telefone_usuario|default:"Não informado" }}</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="card-footer text-end">
+        <a href="{% url 'equipamentos:equipamento_list' %}" class="btn btn-secondary">Voltar para a Lista</a>
+        <a href="{% url 'equipamentos:equipamento_update' equipamento.pk %}" class="btn btn-warning">Editar Equipamento</a>
+    </div>
+</div>
+{% endblock %}
