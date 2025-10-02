@@ -15,32 +15,31 @@ from django.core.mail import EmailMessage
 from django.utils import timezone
 from .models import TemplateEmail, ConfiguracaoEmail
 from casos.models import FluxoInterno, Caso
+from django.template.loader import render_to_string
+from .models import Evento, Notificacao
+from casos.microsoft_graph_service import enviar_email as enviar_email_graph
+
+import json
+from django.template import Template, Context
+from django.utils import timezone
+from django.core.mail import EmailMessage
+from core.models import ConfiguracaoEmail
+from notificacoes.models import TemplateEmail
+from casos.models import Caso, FluxoInterno
+from casos.microsoft_graph_service import enviar_email as enviar_email_graph
 
 def enviar_notificacao(slug_evento, contexto, anexo_buffer=None, nome_anexo=None, content_type_anexo=None):
     """
-    Função central e robusta para enviar e-mails baseados em modelos do admin
-    E TAMBÉM registrar a comunicação no Fluxo Interno do caso com um resumo.
+    Função central para enviar e-mails via Microsoft Graph baseados em modelos
+    e registrar a comunicação no Fluxo Interno do caso.
     """
     
-    # --- BUSCAR CONFIGURAÇÃO DO SERVIDOR ---
-    try:
-        config_email = ConfiguracaoEmail.objects.get(ativo=True)
-    except ConfiguracaoEmail.DoesNotExist:
-        mensagem_erro = "ERRO: Nenhuma configuração de servidor de e-mail está marcada como 'Ativa'."
-        print(mensagem_erro); return False, "Erro: Nenhum servidor de e-mail ativo."
-    except ConfiguracaoEmail.MultipleObjectsReturned:
-        mensagem_erro = "ERRO: Mais de uma configuração de servidor está marcada como 'Ativa'."
-        print(mensagem_erro); return False, "Erro: Múltiplos servidores de e-mail ativos."
-
     # --- BUSCAR TEMPLATE DO E-MAIL ---
     try:
         template_email = TemplateEmail.objects.get(evento__slug=slug_evento, ativo=True)
     except TemplateEmail.DoesNotExist:
-        mensagem_aviso = f"AVISO: Nenhum template ativo para o evento '{slug_evento}'."
-        print(mensagem_aviso); return False, f"Nenhum template ativo para '{slug_evento}'."
+        return False, f"Nenhum template ativo para o evento '{slug_evento}'."
     except TemplateEmail.MultipleObjectsReturned:
-        mensagem_aviso = f"AVISO: Múltiplos templates ativos para '{slug_evento}'. Usando o primeiro."
-        print(mensagem_aviso)
         template_email = TemplateEmail.objects.filter(evento__slug=slug_evento, ativo=True).first()
 
     # --- RENDERIZAR ASSUNTO E CORPO ---
@@ -51,8 +50,7 @@ def enviar_notificacao(slug_evento, contexto, anexo_buffer=None, nome_anexo=None
         assunto_final = template_assunto.render(contexto_django)
         corpo_final = template_corpo.render(contexto_django)
     except Exception as e:
-        mensagem_erro = f"ERRO: Falha ao renderizar template para '{slug_evento}'. Erro: {e}"
-        print(mensagem_erro); return False, "Erro ao processar o template."
+        return False, f"Erro ao processar o template: {e}"
 
     # --- MONTAR LISTA DE DESTINATÁRIOS ---
     lista_emails = []
@@ -65,32 +63,35 @@ def enviar_notificacao(slug_evento, contexto, anexo_buffer=None, nome_anexo=None
     
     destinatarios_finais = sorted(list(set(lista_emails)))
     if not destinatarios_finais:
-        return False, "Nenhum destinatário configurado."
+        return False, "Nenhum destinatário configurado para este evento."
 
-    # --- CRIAR E ENVIAR O E-MAIL ---
+    # --- OBTER O REMETENTE ---
+    usuario_acao = contexto.get('usuario_acao')
+    if not usuario_acao or not usuario_acao.email:
+        return False, "Erro: O usuário que disparou a ação não tem um e-mail válido para ser o remetente."
+
+    # --- CRIAR E ENVIAR O E-MAIL VIA MICROSOFT GRAPH ---
     try:
-        conexao = config_email.get_connection()
-        email = EmailMessage(subject=assunto_final, body=corpo_final, from_email=config_email.email_host_user, to=destinatarios_finais, connection=conexao)
+        destinatarios_str = ", ".join(destinatarios_finais)
         
-        if anexo_buffer and nome_anexo:
-            anexo_buffer.seek(0)
-            content_type = content_type_anexo or 'application/octet-stream'
-            email.attach(nome_anexo, anexo_buffer.read(), content_type)
+        # Chama nosso novo serviço de envio via Microsoft Graph
+        sucesso = enviar_email_graph(
+            remetente_email=usuario_acao.email,
+            para=destinatarios_str,
+            assunto=assunto_final,
+            corpo=corpo_final,
+            # (Ainda não implementamos anexos nesta nova função, mas podemos adicionar depois)
+        )
         
-        email.send()
-        
-        # ===================================================================
-        # ===== REGISTRO NO FLUXO INTERNO (LÓGICA ATUALIZADA) =====
-        # ===================================================================
+        if not sucesso:
+            return False, "O serviço da Microsoft retornou uma falha ao tentar enviar o e-mail."
+
+        # --- REGISTRO NO FLUXO INTERNO ---
         caso_obj = contexto.get('caso')
         if caso_obj and isinstance(caso_obj, Caso):
-            destinatarios_str = ", ".join(destinatarios_finais)
-            
-            # Parte 1: O resumo visível na lista
             resumo_email = f"Evento: {template_email.evento.nome}"
-            
-            # Parte 2: O conteúdo completo para o modal
             conteudo_completo = (
+                f"De: {usuario_acao.email}\n"
                 f"Para: {destinatarios_str}\n"
                 f"Assunto: {assunto_final}\n\n"
                 f"--- Conteúdo ---\n{corpo_final}"
@@ -98,10 +99,7 @@ def enviar_notificacao(slug_evento, contexto, anexo_buffer=None, nome_anexo=None
             if nome_anexo:
                 conteudo_completo += f"\n\nAnexo: {nome_anexo}"
             
-            # Junta tudo com os marcadores
             descricao_fluxo_interno = f"[EMAIL]::{resumo_email}|||{conteudo_completo}"
-            
-            usuario_acao = contexto.get('usuario_acao')
             
             FluxoInterno.objects.create(
                 caso=caso_obj,
@@ -110,9 +108,8 @@ def enviar_notificacao(slug_evento, contexto, anexo_buffer=None, nome_anexo=None
                 usuario_criacao=usuario_acao
             )
         
-        return True, "E-mail enviado com sucesso."
+        return True, "E-mail enviado com sucesso via Microsoft Graph."
         
     except Exception as e:
-        mensagem_erro = f"ERRO SMTP ao enviar notificação '{slug_evento}'. Erro: {e}"
-        print(mensagem_erro)
+        print(f"ERRO CRÍTICO ao tentar enviar notificação '{slug_evento}' via Graph. Erro: {e}")
         return False, "Erro técnico no envio do e-mail."

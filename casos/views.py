@@ -85,13 +85,17 @@ class CasoCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         self.object = form.save(commit=False)
         self.object.save()
+        
+        # --- LÓGICA DO SHAREPOINT (continua igual) ---
         try:
             nome_base_pasta = f"{self.object.id}"
             caracteres_invalidos = r'<>:"/\|?*'
             nome_pasta_sanitizado = nome_base_pasta
             for char in caracteres_invalidos:
                 nome_pasta_sanitizado = nome_pasta_sanitizado.replace(char, '-')
+            
             pasta_criada_json = criar_pasta_caso(nome_pasta_sanitizado)
+            
             if pasta_criada_json:
                 self.object.sharepoint_folder_id = pasta_criada_json['id']
                 self.object.sharepoint_folder_url = pasta_criada_json['webUrl']
@@ -112,9 +116,34 @@ class CasoCreateView(LoginRequiredMixin, CreateView):
         except Exception as e:
             print(f"ERRO CRÍTICO NA INTEGRAÇÃO COM SHAREPOINT (VIEW): {e}")
             messages.error(self.request, f"O caso foi criado, mas falhou ao criar a pasta no SharePoint: {e}")
+        
+        # --- NOVA LÓGICA DE NOTIFICAÇÃO ---
+        try:
+            # Prepara o contexto com as informações necessárias para o template do e-mail
+            contexto_notificacao = {
+                'caso': self.object,
+                'usuario_acao': self.request.user  # Passa o usuário logado como remetente
+            }
+            
+            # Chama o nosso serviço de notificação para o evento 'novo-caso-criado'
+            sucesso, mensagem = enviar_notificacao(
+                slug_evento='novo-caso-criado', 
+                contexto=contexto_notificacao
+            )
+            
+            # Adiciona uma mensagem de feedback para o usuário sobre a notificação
+            if sucesso:
+                messages.info(self.request, "Notificações de novo caso foram enviadas.")
+            else:
+                # O 'mensagem' aqui vem do retorno da função enviar_notificacao
+                messages.warning(self.request, f"Não foi possível enviar as notificações: {mensagem}")
+
+        except Exception as e:
+            print(f"ERRO CRÍTICO AO ENVIAR NOTIFICAÇÃO DE NOVO CASO: {e}")
+            messages.error(self.request, f"Ocorreu um erro inesperado ao tentar enviar as notificações: {e}")
+
+        # Redireciona para a página de edição do caso, como antes
         return redirect(self.get_success_url())
-    def get_success_url(self):
-        return reverse_lazy('casos:caso_update', kwargs={'pk': self.object.pk})
 
 class CasoUpdateView(LoginRequiredMixin, UpdateView):
     model = Caso
