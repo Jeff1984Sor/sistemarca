@@ -1,0 +1,61 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" action="{% url 'casos:acao_list' %}">
+            <div class="row g-3 align-items-end">
+                <div class="col-lg-12"><label for="id_texto" class="form-label">Buscar por Texto ou ID do Caso</label><input type="text" name="texto" class="form-control" id="id_texto" placeholder="Título da ação, do caso, aviso..." value="{{ request.GET.texto }}"></div>
+                <div class="col-lg-3 col-md-6"><label for="id_responsavel" class="form-label">Responsável</label><select name="responsavel" class="form-select" id="id_responsavel"><option value="">Todos</option>{% for user in responsaveis %}<option value="{{ user.pk }}" {% if request.GET.responsavel == user.pk|stringformat:"s" %}selected{% endif %}>{{ user.get_full_name|default:user.username }}</option>{% endfor %}</select></div>
+                <div class="col-lg-2 col-md-6"><label for="id_status" class="form-label">Status da Ação</label><select name="status" class="form-select" id="id_status"><option value="">Todos</option>{% for val, txt in status_choices %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ txt }}</option>{% endfor %}</select></div>
+                <div class="col-lg-3 col-md-6"><label for="id_cliente" class="form-label">Cliente</label><select name="cliente" class="form-select" id="id_cliente"><option value="">Todos</option>{% for cliente in clientes %}<option value="{{ cliente.pk }}" {% if request.GET.cliente == cliente.pk|stringformat:"s" %}selected{% endif %}>{{ cliente.nome_razao_social }}</option>{% endfor %}</select></div>
+                <div class="col-lg-2 col-md-6"><label for="id_prazo_de" class="form-label">Prazo (De)</label><input type="date" name="prazo_de" class="form-control" id="id_prazo_de" value="{{ request.GET.prazo_de }}"></div>
+                <div class="col-lg-2 col-md-6"><label for="id_prazo_ate" class="form-label">Prazo (Até)</label><input type="date" name="prazo_ate" class="form-control" id="id_prazo_ate" value="{{ request.GET.prazo_ate }}"></div>
+                <div class="col-lg-2 col-md-12 d-flex gap-2"><a href="{% url 'casos:acao_list' %}" class="btn btn-secondary w-100">Limpar</a><button type="submit" class="btn btn-primary w-100"><i class="bi bi-search"></i> Filtrar</button></div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-end"><a href="{% url 'casos:exportar_acoes_excel' %}?{{ querystring }}" class="btn btn-outline-success"><i class="bi bi-file-earmark-excel"></i> Exportar Resultado</a></div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Caso</th>
+                        <th>Título do Caso</th>
+                        <th>Ação</th>
+                        <th>Responsável</th>
+                        <th>Prazo</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for acao in acoes %}
+                    <tr>
+                        <td><a href="{% url 'casos:caso_detail' acao.caso.pk %}">#{{ acao.caso.id }}</a></td>
+                        <td>{{ acao.caso.titulo_caso|truncatechars:50 }}</td>
+                        <td>{{ acao.acao_modelo.titulo }}</td>
+                        <td>{{ acao.responsavel.get_full_name|default:acao.responsavel.username }}</td>
+                        <td>{% if acao.prazo_final %}{{ acao.prazo_final|date:"d/m/Y" }}{% else %}Sem prazo{% endif %}</td>
+                        <td><span class="badge {% if acao.status == 'P' %}text-bg-warning{% else %}text-bg-success{% endif %}">{{ acao.get_status_display }}</span></td>
+                        <td><a href="{% url 'casos:caso_detail' acao.caso.pk %}#acoes-tab-pane" class="btn btn-sm btn-info" title="Ver no Caso"><i class="bi bi-box-arrow-up-right"></i></a></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted">Nenhuma ação encontrada com os filtros aplicados.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if is_paginated %}
+            <nav><ul class="pagination justify-content-center">{% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page=1&{{ querystring }}">«</a></li><li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ querystring }}">‹</a></li>{% endif %}<li class="page-item active"><span class="page-link">{{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>{% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ querystring }}">›</a></li><li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&{{ querystring }}">»</a></li>{% endif %}</ul></nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,16 +1,39 @@
+import calendar
+import json
+from collections import defaultdict
+from datetime import date
+from django.db.models import Count
+from django.db.models.functions import TruncMonth
 from django.views.generic import TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils import timezone
-from datetime import date, timedelta
-from dateutil.relativedelta import relativedelta
-from django.db.models import Count
-from django.db.models.functions import TruncMonth
-from collections import defaultdict
-import calendar
-import json
 
-from casos.models import Tarefa, Caso
-from .dashboard_data import get_casos_por_status, get_casos_por_advogado
+# Importa os modelos novos e antigos que ainda são necessários
+from casos.models import Caso, InstanciaAcao, Status
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+# Funções auxiliares para os gráficos (agora com lógica real)
+def get_casos_por_status():
+    dados_status = Status.objects.annotate(total_casos=Count('caso')).filter(total_casos__gt=0)
+    labels = [s.nome for s in dados_status]
+    data = [s.total_casos for s in dados_status]
+    return {"labels": labels, "data": data}
+
+def get_casos_por_advogado():
+    """Retorna dados para o gráfico de barras de casos por advogado."""
+    
+    # O caminho correto é: User -> advogado (relação OneToOne) -> casos_responsavel (related_name da FK em Caso)
+    dados_advogado = User.objects.annotate(
+        total_casos=Count('advogado__casos_responsavel')
+    ).filter(total_casos__gt=0).order_by('-total_casos')
+
+    labels = [a.get_full_name() or a.username for a in dados_advogado]
+    data = [a.total_casos for a in dados_advogado]
+
+    return {"labels": labels, "data": data}
+
 
 class HomeView(LoginRequiredMixin, TemplateView):
     template_name = "core/home.html"
@@ -20,16 +43,19 @@ class HomeView(LoginRequiredMixin, TemplateView):
         
         hoje = timezone.now().date()
         ano_atual = hoje.year
+        usuario_logado = self.request.user
 
-        todas_tarefas_pendentes = Tarefa.objects.filter(
-            responsavel=self.request.user,
-            status__in=['P', 'A']
-        ).select_related('caso', 'tipo_tarefa')
+        # --- LÓGICA DE TAREFAS/AÇÕES ATUALIZADA ---
+        # Pega as ações pendentes do usuário cujo prazo final é exatamente hoje
+        tarefas_para_hoje = InstanciaAcao.objects.filter(
+            responsavel=usuario_logado,
+            status='P',
+            prazo_final__date=hoje
+        ).select_related('caso', 'acao_modelo').order_by('prazo_final')
         
-        tarefas_de_hoje = [t for t in todas_tarefas_pendentes if t.data_conclusao_prevista and t.data_conclusao_prevista == hoje]
+        context['tarefas_para_hoje'] = tarefas_para_hoje
         
-        context['minhas_tarefas_pendentes'] = tarefas_de_hoje
-        
+        # --- LÓGICA DE DASHBOARD RESTAURADA ---
         if hoje.month <= 6:
             mes_inicial_semestre, mes_final_semestre = 1, 6
         else:

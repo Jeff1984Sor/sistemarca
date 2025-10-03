@@ -51,14 +51,13 @@
                         <li class="nav-item"><span class="nav-link disabled mx-2">|</span></li>
                         {% if 'casos' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'casos:caso_list' %}">Casos</a></li>{% endif %}
                         {% if 'pesquisa-casos' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'casos:caso_pesquisa' %}">Pesquisa</a></li>{% endif %}
+                        <li class="nav-item"><a class="nav-link" href="{% url 'casos:acao_list' %}">Ações</a></li>
                         {% if 'kanban' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'casos:kanban_board' %}">Kanban</a></li>{% endif %}
-                        {% if 'tarefas' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'casos:tarefa_list_all' %}">Tarefas</a></li>{% endif %}
-                        {% if 'timesheet' in modulos_visiveis %}<li class="nav-item"><a class="nav-link" href="{% url 'casos:timesheet_list_all' %}">Timesheet</a></li>{% endif %}
+                        
                     </ul>
                     <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
                          <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                               
                                 <span>{{ user.get_full_name|default:user.username }}</span>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end">

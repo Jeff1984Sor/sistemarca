@@ -11,7 +11,7 @@
     <li class="nav-item" role="presentation"><button class="nav-link" id="andamento-caso-tab" data-bs-toggle="tab" data-bs-target="#andamento-caso-tab-pane" type="button" role="tab">Andamento do Caso</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" id="workflow-tab" data-bs-toggle="tab" data-bs-target="#workflow-tab-pane" type="button" role="tab">Workflow</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" id="fluxo-interno-tab" data-bs-toggle="tab" data-bs-target="#fluxo-interno-tab-pane" type="button" role="tab">Fluxo Interno</button></li>
-    <li class="nav-item" role="presentation"><button class="nav-link" id="tarefas-tab" data-bs-toggle="tab" data-bs-target="#tarefas-tab-pane" type="button" role="tab">Tarefas</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" id="acoes-tab" data-bs-toggle="tab" data-bs-target="#acoes-tab-pane" type="button" role="tab">Ações</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" id="timesheet-tab" data-bs-toggle="tab" data-bs-target="#timesheet-tab-pane" type="button" role="tab">Timesheet</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" id="anexos-sharepoint-tab" data-bs-toggle="tab" data-bs-target="#anexos-sharepoint-tab-pane" type="button" role="tab">Anexos</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" id="email-tab" data-bs-toggle="tab" data-bs-target="#email-tab-pane" type="button" role="tab">Email</button></li>
@@ -20,32 +20,7 @@
 <div class="tab-content" id="casoDetailTabContent">
 
     <div class="tab-pane fade show active" id="detalhes-tab-pane" role="tabpanel">
-        <div class="card border-top-0 rounded-0 rounded-bottom">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Informações do Caso</h5>
-                <div>
-                    <a href="{% url 'casos:caso_update' caso.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-pencil-square"></i> Editar Caso</a> 
-                    <a href="{% url 'casos:caso_list' %}" class="btn btn-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <h6 class="mt-3 border-bottom pb-2">Informações Principais</h6>
-                    <div class="col-md-6"><p><strong>Fase do Workflow:</strong> <span class="badge bg-info text-dark">{{ caso.fase_atual_workflow.nome|default:"Não iniciado ou Concluído" }}</span></p></div>
-                    <div class="col-md-6"><p><strong>Título:</strong> {{ caso.titulo_caso }}</p></div>
-                    <div class="col-md-6"><p><strong>Cliente:</strong> {{ caso.cliente }}</p></div>
-                    <div class="col-md-6"><p><strong>Produto:</strong> {{ caso.produto }}</p></div>
-                    <div class="col-md-6"><p><strong>Status:</strong> {{ caso.status }}</p></div>
-                    <div class="col-md-6"><p><strong>Data de Entrada:</strong> {{ caso.data_entrada_rca|date:"d/m/Y"|default:"-" }}</p></div>
-                    <h6 class="mt-4 border-bottom pb-2">Informações do Produto</h6>
-                    {% for valor_campo in caso.valores_dinamicos.all %}
-                        <div class="col-md-6"><p><strong>{{ valor_campo.campo.nome_label }}:</strong> {{ valor_campo.valor|linebreaksbr|default:"-" }}</p></div>
-                    {% empty %}
-                        <div class="col-12"><p class="text-muted">Nenhum campo customizado preenchido.</p></div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
+        <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="mb-0">Informações do Caso</h5><div><a href="{% url 'casos:caso_update' caso.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-pencil-square"></i> Editar Caso</a><a href="{% url 'casos:caso_list' %}" class="btn btn-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a></div></div><div class="card-body"><div class="row g-3"><h6 class="mt-3 border-bottom pb-2">Informações Principais</h6><div class="col-md-6"><p><strong>Etapa do Workflow:</strong> <span class="badge bg-info text-dark">{{ caso.etapa_atual.nome|default:"Não iniciado ou Concluído" }}</span></p></div><div class="col-md-6"><p><strong>Título:</strong> {{ caso.titulo_caso }}</p></div><div class="col-md-6"><p><strong>Cliente:</strong> {{ caso.cliente }}</p></div><div class="col-md-6"><p><strong>Produto / Objeto do Serviço:</strong> {{ caso.produto }}</p></div><div class="col-md-6"><p><strong>Status:</strong> {{ caso.status }}</p></div><div class="col-md-6"><p><strong>Data de Entrada:</strong> {{ caso.data_entrada_rca|date:"d/m/Y"|default:"-" }}</p></div><h6 class="mt-4 border-bottom pb-2">Informações Adicionais</h6>{% for valor_campo in caso.valores_dinamicos.all %}<div class="col-md-6"><p><strong>{{ valor_campo.campo.nome_label }}:</strong> {{ valor_campo.valor|linebreaksbr|default:"-" }}</p></div>{% empty %}<div class="col-12"><p class="text-muted">Nenhum campo customizado preenchido.</p></div>{% endfor %}</div></div></div>
     </div>
 
     <div class="tab-pane fade" id="andamento-caso-tab-pane" role="tabpanel">
@@ -53,75 +28,34 @@
     </div>
 
     <div class="tab-pane fade" id="workflow-tab-pane" role="tabpanel">
-        <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header"><h5 class="mb-0">Histórico de Fases do Workflow</h5></div><div class="card-body">{% if caso.historico_fases.exists %}<table class="table"><thead><tr><th>Fase</th><th>Data de Entrada</th><th>Data de Saída</th><th>Tempo na Fase (dias)</th></tr></thead><tbody>{% for historico in caso.historico_fases.all %}<tr {% if not historico.data_saida %}class="table-info"{% endif %}><td>{{ historico.fase.nome }}{% if not historico.data_saida %} <span class="badge bg-primary">Fase Atual</span>{% endif %}</td><td>{{ historico.data_entrada|date:"d/m/Y H:i" }}</td><td>{{ historico.data_saida|date:"d/m/Y H:i"|default:"-" }}</td><td>{{ historico.tempo_na_fase }}</td></tr>{% endfor %}</tbody></table>{% else %}<p class="text-muted">Nenhum histórico de workflow registrado.</p>{% endif %}</div></div>
+        <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header"><h5 class="mb-0">Histórico de Etapas do Workflow</h5></div><div class="card-body">{% if historico_etapas %}<table class="table"><thead><tr><th>Etapa</th><th>Data de Entrada</th><th>Data de Saída</th><th>Tempo na Etapa</th></tr></thead><tbody>{% for historico in historico_etapas %}<tr {% if not historico.data_saida %}class="table-info"{% endif %}><td>{{ historico.etapa.nome }}{% if not historico.data_saida %} <span class="badge bg-primary">Etapa Atual</span>{% endif %}</td><td>{{ historico.data_entrada|date:"d/m/Y H:i" }}</td><td>{{ historico.data_saida|date:"d/m/Y H:i"|default:"-" }}</td><td>{{ historico.tempo_na_etapa }}</td></tr>{% endfor %}</tbody></table>{% else %}<p class="text-muted">Nenhum histórico de workflow registrado.</p>{% endif %}</div></div>
     </div>
 
     <div class="tab-pane fade" id="fluxo-interno-tab-pane" role="tabpanel">
         <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header"><h5 class="mb-0">Adicionar Registro</h5></div><div class="card-body"><form action="{% url 'casos:add_fluxo_interno' caso.pk %}" method="post">{% csrf_token %}{{ fluxo_interno_form.as_p }}<button type="submit" class="btn btn-primary">Adicionar</button></form></div></div><div class="card mt-3"><div class="card-header"><h5 class="mb-0">Histórico do Fluxo Interno</h5></div><div class="list-group list-group-flush">{% for fluxo in caso.fluxo_interno.all %}<div class="list-group-item"><p class="mb-1">{{ fluxo.descricao|linebreaksbr }}</p><small class="text-muted">{% if fluxo.usuario_criacao %}Por {{ fluxo.usuario_criacao.get_full_name|default:fluxo.usuario_criacao.username }}{% else %}Pelo Sistema{% endif %} em {{ fluxo.data_fluxo|date:"d/m/Y" }}</small></div>{% empty %}<div class="list-group-item text-center text-muted">Nenhum registro no fluxo interno.</div>{% endfor %}</div></div>
     </div>
 
-    <div class="tab-pane fade" id="tarefas-tab-pane" role="tabpanel">
-        <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header"><h5 class="mb-0">Adicionar Tarefa</h5></div><div class="card-body"><form action="{% url 'casos:add_tarefa' caso.pk %}" method="post">{% csrf_token %}{{ tarefa_form.as_p }}<button type="submit" class="btn btn-primary">Adicionar</button></form></div></div><div class="card mt-3"><div class="card-header"><h5 class="mb-0">Lista de Tarefas</h5></div><div class="list-group list-group-flush">{% for tarefa in caso.tarefas.all %}<div class="list-group-item d-flex justify-content-between align-items-center"><div><h6>{{ tarefa.tipo_tarefa.nome }}</h6><small><strong>Responsável:</strong> {{ tarefa.responsavel.get_full_name|default:"-" }} | <strong>Prazo:</strong> {{ tarefa.data_conclusao_prevista|date:"d/m/Y" }} | <strong>Status:</strong> {{ tarefa.get_status_display }}</small>{% if tarefa.observacao %}<p class="small text-muted mt-1 mb-0 fst-italic"><strong>Obs:</strong> {{ tarefa.observacao|linebreaksbr }}</p>{% endif %}{% if tarefa.status == 'C' and tarefa.descricao_conclusao %}<p class="small text-success mt-1 mb-0"><strong>Conclusão:</strong> {{ tarefa.descricao_conclusao|linebreaksbr }}</p>{% endif %}</div><div>{% if tarefa.status == 'C' %}<form action="{% url 'casos:reabrir_tarefa' tarefa.pk %}" method="post" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-sm btn-secondary" title="Reabrir">Reabrir</button></form>{% else %}<button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#concluirTarefaModal-{{ tarefa.pk }}" title="Concluir">Concluir</button>{% endif %}</div></div>{% empty %}<div class="list-group-item text-center text-muted">Nenhuma tarefa para este caso.</div>{% endfor %}</div></div>
+    <div class="tab-pane fade" id="acoes-tab-pane" role="tabpanel">
+        <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header"><h5 class="mb-0">Ações do Workflow</h5></div><div class="list-group list-group-flush"><div class="list-group-item list-group-item-light fw-bold">Ações Pendentes</div>{% for acao in acoes_pendentes %}<div class="list-group-item p-3"><div class="d-flex w-100 justify-content-between"><h6 class="mb-1">{{ acao.acao_modelo.titulo }}</h6><small class="text-muted">Criada {{ acao.data_criacao|timesince }} atrás</small></div><div class="mb-3"><span class="badge text-bg-light me-2">Responsável: {{ acao.responsavel.get_full_name|default:acao.responsavel.username|default:"N/A" }}</span>{% if acao.prazo_final %}{% now "Y-m-d H:i:s" as today %}{% if acao.prazo_final|date:"Y-m-d H:i:s" < today %}<span class="badge text-bg-danger">Prazo: {{ acao.prazo_final|date:"d/m/Y" }} (Atrasada)</span>{% else %}<span class="badge text-bg-warning">Prazo: {{ acao.prazo_final|date:"d/m/Y" }}</span>{% endif %}{% else %}<span class="badge text-bg-secondary">Sem prazo definido</span>{% endif %}</div>{% if acao.acao_modelo.instrucoes %}<p class="mb-3 fst-italic bg-light p-2 rounded"><strong>Instruções:</strong> {{ acao.acao_modelo.instrucoes|linebreaksbr }}</p>{% endif %}<div class="btn-group" role="group">{% for opcao in acao.acao_modelo.opcoes_decisao.all %}<button class="btn btn-sm btn-primary btn-executar-acao" data-bs-toggle="modal" data-bs-target="#executarAcaoModal" data-acao-pk="{{ acao.pk }}" data-opcao-pk="{{ opcao.pk }}" data-label-decisao="{{ opcao.label_do_botao }}">{{ opcao.label_do_botao }}</button>{% empty %}<button class="btn btn-sm btn-success btn-executar-acao" data-bs-toggle="modal" data-bs-target="#executarAcaoModal" data-acao-pk="{{ acao.pk }}" data-label-decisao="Concluir">Concluir</button>{% endfor %}</div></div>{% empty %}<div class="list-group-item text-center text-muted p-3">Nenhuma ação pendente.</div>{% endfor %}</div><div class="list-group list-group-flush mt-4"><div class="list-group-item list-group-item-light fw-bold">Histórico de Ações</div>{% for acao in acoes_concluidas %}<div class="list-group-item p-3 bg-light-subtle"><div class="d-flex w-100 justify-content-between"><h6 class="mb-1 text-muted"><i class="bi bi-check-circle-fill text-success me-2"></i>{{ acao.acao_modelo.titulo }}</h6><small class="text-muted">Concluída em {{ acao.data_conclusao|date:"d/m/Y H:i" }}</small></div>{% if acao.descricao_conclusao %}<p class="small mb-0 fst-italic">"{{ acao.descricao_conclusao|linebreaksbr }}"</p>{% endif %}</div>{% empty %}<div class="list-group-item text-center text-muted p-3">Nenhuma ação foi concluída ainda.</div>{% endfor %}</div></div>
     </div>
 
     <div class="tab-pane fade" id="timesheet-tab-pane" role="tabpanel">
-        <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header"><h5 class="mb-0">Lançar Horas</h5></div><div class="card-body"><form action="{% url 'casos:add_timesheet' caso.pk %}" method="post">{% csrf_token %}{{ timesheet_form.as_p }}<button type="submit" class="btn btn-primary">Lançar</button></form></div></div><div class="card mt-3"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="mb-0">Lançamentos Anteriores</h5><div><a href="{% url 'casos:enviar_timesheet_email' caso.pk %}" class="btn btn-info btn-sm" onclick="return confirm('Tem certeza?');"><i class="bi bi-envelope"></i> Enviar</a><a href="{% url 'casos:exportar_timesheet_excel' caso.pk %}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Excel</a><a href="{% url 'casos:exportar_timesheet_pdf' caso.pk %}" class="btn btn-danger btn-sm"><i class="bi bi-file-earmark-pdf"></i> PDF</a></div></div><ul class="list-group list-group-flush">{% for ts in caso.timesheets.all %}<li class="list-group-item d-flex justify-content-between align-items-center"><div><strong>{{ ts.data_execucao|date:"d/m/Y" }}</strong> - <span>{{ ts.profissional.get_full_name|default:ts.profissional.username }}</span> - <span class="fw-bold">{{ ts.tempo }}</span><p class="small text-muted mb-0">{{ ts.descricao }}</p></div><div><a href="{% url 'casos:timesheet_update' ts.pk %}" class="btn btn-warning btn-sm" title="Editar"><i class="bi bi-pencil"></i></a></div></li>{% empty %}<li class="list-group-item text-center text-muted">Nenhum lançamento.</li>{% endfor %}</ul><div class="card-footer text-end"><strong class="text-success">Total: {{ caso.total_horas_trabalhadas }}</strong></div></div>
+        <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header"><h5 class="mb-0">Lançar Horas</h5></div><div class="card-body"><form action="{% url 'casos:add_timesheet' caso.pk %}" method="post">{% csrf_token %}{{ lancamento_horas_form.as_p }}<button type="submit" class="btn btn-primary">Lançar</button></form></div></div><div class="card mt-3"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="mb-0">Lançamentos Anteriores</h5><div><a href="{% url 'casos:enviar_timesheet_email' caso.pk %}" class="btn btn-info btn-sm"><i class="bi bi-envelope"></i> Enviar</a><a href="{% url 'casos:exportar_timesheet_excel' caso.pk %}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Excel</a><a href="{% url 'casos:exportar_timesheet_pdf' caso.pk %}" class="btn btn-danger btn-sm"><i class="bi bi-file-earmark-pdf"></i> PDF</a></div></div><ul class="list-group list-group-flush">{% for ts in caso.timesheets.all %}<li class="list-group-item d-flex justify-content-between align-items-center"><div><strong>{{ ts.data_execucao|date:"d/m/Y" }}</strong> - <span>{{ ts.profissional.get_full_name|default:ts.profissional.username }}</span> - <span class="fw-bold">{{ ts.tempo_formatado }}</span><p class="small text-muted mb-0">{{ ts.descricao }}</p></div><div class="btn-group btn-group-sm"><a href="{% url 'casos:timesheet_update' ts.pk %}" class="btn btn-warning" title="Editar"><i class="bi bi-pencil"></i></a><form action="{% url 'casos:delete_timesheet' ts.pk %}" method="post" class="d-inline" onsubmit="return confirm('Tem certeza?');">{% csrf_token %}<button type="submit" class="btn btn-danger" title="Excluir"><i class="bi bi-trash"></i></button></form></div></li>{% empty %}<li class="list-group-item text-center text-muted">Nenhum lançamento.</li>{% endfor %}</ul><div class="card-footer text-end"><strong class="text-success">Total: {{ caso.total_horas_trabalhadas }}</strong></div></div>
     </div>
 
     <div class="tab-pane fade" id="anexos-sharepoint-tab-pane" role="tabpanel">
-        <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header"><h5 class="mb-0">Anexos</h5></div><div class="card-body">{% if caso.sharepoint_folder_url %}<div class="row mb-4"><div class="col-md-6"><form action="{% url 'casos:criar_pasta_anexo' caso.pk %}" method="post" class="d-flex gap-2">{% csrf_token %}<input type="text" name="nome_pasta" class="form-control" placeholder="Nova pasta na raiz" required><button type="submit" class="btn btn-outline-primary btn-sm">Criar Pasta</button></form></div><div class="col-md-6"><form action="{% url 'casos:upload_arquivo_anexo' caso.pk %}" method="post" enctype="multipart/form-data" class="d-flex gap-2">{% csrf_token %}<input type="hidden" name="parent_folder_id" value="{{ caso.sharepoint_folder_id }}"><input type="file" name="arquivo" class="form-control" required multiple><button type="submit" class="btn btn-outline-info btn-sm">Enviar Arquivo(s)</button></form></div></div><h6>Conteúdo:</h6>{% if arquivos_sharepoint %}<ul class="list-group">{% for item in arquivos_sharepoint %}<li class="list-group-item"><div class="d-flex justify-content-between align-items-center"><span class="text-break"><i class="bi {% if item.folder %}bi-folder text-warning{% else %}bi-file-earmark-text text-secondary{% endif %} me-2"></i>{{ item.name }}</span><div class="btn-group btn-group-sm">{% if item.folder %}<button class="btn btn-info btn-upload-to-folder" data-bs-toggle="modal" data-bs-target="#uploadModal" data-folder-id="{{ item.id }}" data-folder-name="{{ item.name }}" title="Enviar arquivo"><i class="bi bi-upload"></i></button><button class="btn btn-secondary btn-expand-folder" data-folder-id="{{ item.id }}" data-folder-name="{{ item.name }}" title="Ver conteúdo"><i class="bi bi-plus-lg"></i></button>{% else %}<a href="{% url 'casos:preview_arquivo' item.id %}" target="_blank" class="btn btn-primary" title="Visualizar"><i class="bi bi-eye"></i></a><a href="{{ item|get_item:'@microsoft.graph.downloadUrl' }}" class="btn btn-success" title="Baixar"><i class="bi bi-download"></i></a>{% endif %}<form action="{% url 'casos:deletar_item_anexo' caso.pk item.id %}" method="post" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir \'{{ item.name|escapejs }}\'? Esta ação não pode ser desfeita.');">{% csrf_token %}<button type="submit" class="btn btn-danger" title="Excluir"><i class="bi bi-trash"></i></button></form></div></div><ul class="list-group mt-2 ms-4 d-none" id="subfolder-{{ item.id }}"></ul></li>{% endfor %}</ul>{% else %}<p class="text-muted">A pasta está vazia.</p>{% endif %}{% else %}<p class="text-muted">Nenhuma pasta do SharePoint associada.</p>{% endif %}</div></div>
+        <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header"><h5 class="mb-0">Anexos</h5></div><div class="card-body">{% if caso.sharepoint_folder_url %}<div class="row mb-4"><div class="col-md-6"><form action="{% url 'casos:criar_pasta_anexo' caso.pk %}" method="post" class="d-flex gap-2">{% csrf_token %}<input type="text" name="nome_pasta" class="form-control" placeholder="Nova pasta na raiz" required><button type="submit" class="btn btn-outline-primary btn-sm">Criar Pasta</button></form></div><div class="col-md-6"><form action="{% url 'casos:upload_arquivo_anexo' caso.pk %}" method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="parent_folder_id" value="{{ caso.sharepoint_folder_id }}"><div class="drop-zone"><label for="id_arquivo_raiz" style="cursor: pointer;">Clique ou arraste arquivos aqui<span class="d-block small text-muted file-info mt-2">Nenhum arquivo</span></label><input type="file" name="arquivo" id="id_arquivo_raiz" class="drop-zone-input" required multiple></div><button type="submit" class="btn btn-outline-info btn-sm mt-2 w-100">Enviar Arquivo(s)</button></form></div></div><h6>Conteúdo:</h6>{% if arquivos_sharepoint %}<ul class="list-group">{% for item in arquivos_sharepoint %}<li class="list-group-item"><div class="d-flex justify-content-between align-items-center"><span class="text-break"><i class="bi {% if item.folder %}bi-folder text-warning{% else %}bi-file-earmark-text text-secondary{% endif %} me-2"></i>{{ item.name }}</span><div class="btn-group btn-group-sm">{% if item.folder %}<button class="btn btn-info btn-upload-to-folder" data-bs-toggle="modal" data-bs-target="#uploadModal" data-folder-id="{{ item.id }}" data-folder-name="{{ item.name }}" title="Enviar arquivo"><i class="bi bi-upload"></i></button><button class="btn btn-secondary btn-expand-folder" data-folder-id="{{ item.id }}" data-folder-name="{{ item.name }}" title="Ver conteúdo"><i class="bi bi-plus-lg"></i></button>{% else %}<a href="{% url 'casos:preview_arquivo' item.id %}" target="_blank" class="btn btn-primary" title="Visualizar"><i class="bi bi-eye"></i></a><a href="{{ item|get_item:'@microsoft.graph.downloadUrl' }}" class="btn btn-success" title="Baixar"><i class="bi bi-download"></i></a>{% endif %}<form action="{% url 'casos:deletar_item_anexo' caso.pk item.id %}" method="post" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir \'{{ item.name|escapejs }}\'?');">{% csrf_token %}<button type="submit" class="btn btn-danger" title="Excluir"><i class="bi bi-trash"></i></button></form></div></div><ul class="list-group mt-2 ms-4 d-none" id="subfolder-{{ item.id }}"></ul></li>{% endfor %}</ul>{% else %}<p class="text-muted">A pasta está vazia.</p>{% endif %}{% else %}<p class="text-muted">Nenhuma pasta do SharePoint associada.</p>{% endif %}</div></div>
     </div>
 
     <div class="tab-pane fade" id="email-tab-pane" role="tabpanel">
-        <div class="card border-top-0 rounded-0 rounded-bottom">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Comunicação por E-mail</h5>
-                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#novoEmailModal"><i class="bi bi-plus-circle"></i> Novo E-mail</button>
-            </div>
-            <div class="list-group list-group-flush">
-                {% for email in emails_do_caso %}
-                    <a href="#" class="list-group-item list-group-item-action">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1">{{ email.assunto }}</h6>
-                            <small>{{ email.data_envio|timesince }} atrás</small>
-                        </div>
-                        <p class="mb-1"><strong>De:</strong> {{ email.de }} | <strong>Para:</strong> {{ email.para }}</p>
-                        <small class="text-muted">{{ email.preview }}</small>
-                    </a>
-                {% empty %}
-                    <div class="list-group-item"><p class="text-muted text-center mb-0">Nenhum e-mail associado a este caso ainda.</p></div>
-                {% endfor %}
-            </div>
-        </div>
+        <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="mb-0">Comunicação por E-mail</h5><button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#novoEmailModal"><i class="bi bi-plus-circle"></i> Novo E-mail</button></div><div class="list-group list-group-flush">{% for email in emails_do_caso %}<a href="#" class="list-group-item list-group-item-action"><div class="d-flex w-100 justify-content-between"><h6 class="mb-1">{{ email.assunto|default:"(Sem Assunto)" }}</h6><small class="text-muted">{{ email.data_envio|timesince }} atrás</small></div><p class="mb-1"><strong>De:</strong> {{ email.de }} | <strong>Para:</strong> {{ email.para }}</p><small class="text-muted">{{ email.preview|truncatewords:20|default:"(Sem pré-visualização)" }}</small></a>{% empty %}<div class="list-group-item"><p class="text-muted text-center mb-0">Nenhum e-mail associado.</p></div>{% endfor %}</div></div>
     </div>
 </div>
 
-<div class="modal fade" id="novoEmailModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header"><h5 class="modal-title">Novo E-mail</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <form action="{% url 'casos:enviar_email_caso' caso.pk %}" method="post">
-                <div class="modal-body">
-                    {% csrf_token %}
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">{{ email_form.modelo_id.label_tag }}{{ email_form.modelo_id }}</div>
-                        <div class="col-md-6">{{ email_form.assinatura_id.label_tag }}{{ email_form.assinatura_id }}</div>
-                    </div>
-                    <div class="mb-3">{{ email_form.para.label_tag }}{{ email_form.para }}</div>
-                    <div class="mb-3">{{ email_form.assunto.label_tag }}{{ email_form.assunto }}</div>
-                    <div class="mb-3">{{ email_form.corpo.label_tag }}{{ email_form.corpo }}</div>
-                </div>
-                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Enviar E-mail</button></div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="uploadModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="uploadModalLabel">Enviar Arquivo</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{% url 'casos:upload_arquivo_anexo' caso.pk %}" method="post" enctype="multipart/form-data"><div class="modal-body">{% csrf_token %}<input type="hidden" name="parent_folder_id" id="modal_parent_folder_id"><div class="mb-3"><label for="modal_arquivo_input" class="form-label">Selecione o(s) arquivo(s)</label><input type="file" name="arquivo" id="modal_arquivo_input" class="form-control" required multiple></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Enviar</button></div></form></div></div></div>
-{% for tarefa in caso.tarefas.all %}<div class="modal fade" id="concluirTarefaModal-{{ tarefa.pk }}" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Concluir Tarefa: {{ tarefa.tipo_tarefa.nome }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{% url 'casos:concluir_tarefa' tarefa.pk %}" method="post"><div class="modal-body">{% csrf_token %}{{ conclusao_form.as_p }}</div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Salvar Conclusão</button></div></form></div></div></div>{% endfor %}
-
-{{ email_templates_json|json_script:"email-templates-json" }}
-{{ user_signatures_json|json_script:"user-signatures-json" }}
+<div class="modal fade" id="executarAcaoModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="executarAcaoModalLabel">Executar Ação</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="executar-acao-form" method="post" enctype="multipart/form-data"><div class="modal-body">{% csrf_token %}<div class="mb-3"><label for="descricao_conclusao" class="form-label">Descrição / Observações (Opcional)</label><textarea name="descricao_conclusao" id="descricao_conclusao" class="form-control" rows="3"></textarea></div><div class="mb-3"><label class="form-label">Anexar Arquivos (Opcional)</label><div class="drop-zone"><label for="anexos_acao" style="cursor: pointer;"><i class="bi bi-cloud-arrow-up fs-3"></i><span class="d-block mt-2 file-info">Clique ou arraste arquivos aqui</span></label><input type="file" name="anexos" id="anexos_acao" class="drop-zone-input" multiple></div></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Confirmar</button></div></form></div></div></div>
+<div class="modal fade" id="novoEmailModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Novo E-mail</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{% url 'casos:enviar_email_caso' caso.pk %}" method="post"><div class="modal-body">{% csrf_token %}<div class="row g-3 mb-3"><div class="col-md-6">{{ email_form.modelo_id.label_tag }}{{ email_form.modelo_id }}</div><div class="col-md-6">{{ email_form.assinatura_id.label_tag }}{{ email_form.assinatura_id }}</div></div><div class="mb-3">{{ email_form.para.label_tag }}{{ email_form.para }}</div><div class="mb-3">{{ email_form.assunto.label_tag }}{{ email_form.assunto }}</div><div class="mb-3">{{ email_form.corpo.label_tag }}{{ email_form.corpo }}</div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Enviar E-mail</button></div></form></div></div></div>
+<div class="modal fade" id="uploadModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="uploadModalLabel">Enviar Arquivo</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form action="{% url 'casos:upload_arquivo_anexo' caso.pk %}" method="post" enctype="multipart/form-data"><div class="modal-body">{% csrf_token %}<input type="hidden" name="parent_folder_id" id="modal_parent_folder_id"><div class="drop-zone"><label for="modal_arquivo_input" style="cursor: pointer;">Clique ou arraste arquivos aqui<span class="d-block small text-muted file-info mt-2">Nenhum arquivo</span></label><input type="file" name="arquivo" id="modal_arquivo_input" class="drop-zone-input" required multiple></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Enviar</button></div></form></div></div></div>
+{{ email_templates_json|json_script:"email-templates-json" }}{{ user_signatures_json|json_script:"user-signatures-json" }}
 
 {% endblock %}
 
@@ -138,6 +72,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const target = event.target;
         const expandButton = target.closest('.btn-expand-folder');
         const uploadButton = target.closest('.btn-upload-to-folder');
+        const executarAcaoButton = target.closest('.btn-executar-acao');
         if (expandButton) {
             const folderId = expandButton.dataset.folderId;
             const folderName = expandButton.dataset.folderName;
@@ -179,7 +114,45 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('uploadModalLabel').textContent = `Enviar arquivo para: ${folderName}`;
             document.getElementById('modal_parent_folder_id').value = folderId;
         }
+        if (executarAcaoButton) {
+            const acaoPk = executarAcaoButton.dataset.acaoPk;
+            const opcaoPk = executarAcaoButton.dataset.opcaoPk;
+            const label = executarAcaoButton.dataset.labelDecisao;
+            const modal = document.getElementById('executarAcaoModal');
+            modal.querySelector('.modal-title').textContent = `Confirmar: ${label}`;
+            const form = modal.querySelector('form');
+            if (opcaoPk) {
+                form.action = `/casos/acao/${acaoPk}/executar/${opcaoPk}/`;
+            } else {
+                form.action = `/casos/acao/${acaoPk}/executar/`;
+            }
+        }
     });
+
+    document.querySelectorAll('.drop-zone').forEach(dropZone => {
+        const inputElement = dropZone.querySelector('.drop-zone-input');
+        const infoElement = dropZone.querySelector('.file-info');
+        const labelElement = dropZone.querySelector('label');
+        if (labelElement) { labelElement.addEventListener('click', () => inputElement.click()); }
+        if (inputElement) { inputElement.addEventListener('change', () => updateFileInfo(inputElement, infoElement)); }
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            if (e.dataTransfer.files.length) {
+                inputElement.files = e.dataTransfer.files;
+                updateFileInfo(inputElement, infoElement);
+            }
+        });
+    });
+
+    function updateFileInfo(input, info) {
+        if (!info) return;
+        if (input.files.length === 1) { info.textContent = input.files[0].name; }
+        else if (input.files.length > 1) { info.textContent = `${input.files.length} arquivos selecionados`; }
+        else { info.textContent = 'Clique ou arraste arquivos aqui'; }
+    }
 
     const emailTemplates = JSON.parse(document.getElementById('email-templates-json').textContent);
     const userSignatures = JSON.parse(document.getElementById('user-signatures-json').textContent);

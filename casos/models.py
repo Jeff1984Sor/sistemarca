@@ -8,6 +8,9 @@ from django.db.models import Sum
 from django.template import Template, Context # Adicione estas importações no topo
 from django.conf import settings
 from django.utils import timezone
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 # ==============================================================================
 # SEÇÃO 1: ESTRUTURA DE CAMPOS DINÂMICOS - O CORAÇÃO DA NOVA LÓGICA
@@ -65,29 +68,6 @@ class OpcaoCampo(models.Model):
 
     def __str__(self):
         return self.valor
-class HistoricoFase(models.Model):
-    caso = models.ForeignKey('Caso', on_delete=models.CASCADE, related_name='historico_fases')
-    fase = models.ForeignKey('FaseWorkflow', on_delete=models.PROTECT)
-    data_entrada = models.DateTimeField(auto_now_add=True)
-    data_saida = models.DateTimeField(null=True, blank=True)
-
-    def __str__(self):
-        return f"Caso #{self.caso.id} na fase '{self.fase.nome}'"
-
-    @property
-    def tempo_na_fase(self):
-        """Calcula o tempo gasto na fase em dias."""
-        # Se a fase ainda não terminou, calcula até agora.
-        data_final = self.data_saida or timezone.now()
-        
-        delta = data_final - self.data_entrada
-        dias = delta.days
-        
-        # Garante que o mínimo seja sempre 1 dia
-        return max(dias, 1)
-
-    class Meta:
-        ordering = ['data_entrada']
 
 class EstruturaPasta(models.Model):
     nome_pasta = models.CharField(max_length=100, verbose_name="Nome da Subpasta")
@@ -131,11 +111,10 @@ class RegraCampo(models.Model):
 class Caso(models.Model):
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT)
     produto = models.ForeignKey('Produto', on_delete=models.PROTECT)
+    etapa_atual = models.ForeignKey('EtapaFluxo', on_delete=models.SET_NULL, null=True, blank=True, related_name='casos_nesta_etapa')
     status = models.ForeignKey('Status', on_delete=models.PROTECT)
-    advogado_responsavel = models.ForeignKey('Advogado', on_delete=models.SET_NULL, blank=True, null=True,related_name='casos', verbose_name="Advogado Responsável")
-    analista = models.ForeignKey('Analista', on_delete=models.SET_NULL, blank=True, null=True)
+    advogado_responsavel = models.ForeignKey('Advogado', on_delete=models.SET_NULL, blank=True, null=True,related_name='casos_responsavel', verbose_name="Advogado Responsável")
     data_entrada_rca = models.DateField(verbose_name="Data de Entrada")
-    fase_atual_workflow = models.ForeignKey('FaseWorkflow', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Fase Atual do Workflow")
     data_entrada_fase = models.DateTimeField(null=True, blank=True, verbose_name="Data de Entrada na Fase Atual")
     data_encerramento = models.DateField(verbose_name="Data de Encerramento", null=True, blank=True)
     titulo_caso = models.CharField(max_length=512, verbose_name="Título do Caso", blank=True)
@@ -157,12 +136,12 @@ class Caso(models.Model):
 
     @property
     def total_horas_trabalhadas(self):
-        resultado = self.timesheets.aggregate(total_tempo=Sum('tempo'))
-        total_duration = resultado.get('total_tempo')
-        if total_duration:
-            total_seconds = int(total_duration.total_seconds())
-            horas = total_seconds // 3600
-            minutos = (total_seconds % 3600) // 60
+        # Agora somamos o campo 'minutos_gastos'
+        total_minutos = self.timesheets.aggregate(total=Sum('minutos_gastos'))['total'] or 0
+        
+        if total_minutos > 0:
+            horas = total_minutos // 60
+            minutos = total_minutos % 60
             return f"{horas:02d}:{minutos:02d}"
         return "00:00"
 class AndamentoCaso(models.Model):
@@ -217,57 +196,6 @@ class Status(models.Model):
     class Meta:
         verbose_name_plural = "Status"
 
-class Analista(models.Model):
-    nome = models.CharField(max_length=100)
-    def __str__(self): return self.nome
-
-class TipoTarefa(models.Model):
-    TIPO_PRAZO_CHOICES = (('U', 'Dias Úteis'), ('C', 'Dias Corridos'))
-    nome = models.CharField(max_length=100, unique=True, verbose_name="Nome do Tipo de Tarefa")
-    prazo_dias = models.IntegerField(verbose_name="Prazo Padrão (em dias)")
-    tipo_prazo = models.CharField(max_length=1, choices=TIPO_PRAZO_CHOICES, default='U', verbose_name="Tipo de Prazo")
-    recorrente = models.BooleanField(default=False, verbose_name="É uma tarefa recorrente?")
-    def __str__(self): return self.nome
-    class Meta:
-        verbose_name = "Tipo de Tarefa"
-        verbose_name_plural = "Tipos de Tarefa"
-
-class Workflow(models.Model):
-    nome = models.CharField(max_length=150, unique=True)
-    def __str__(self): return self.nome
-
-class FaseWorkflow(models.Model):
-    workflow = models.ForeignKey(Workflow, on_delete=models.CASCADE, related_name='fases')
-    nome = models.CharField(max_length=100)
-    ordem = models.PositiveIntegerField()
-    atualiza_status_para = models.ForeignKey(Status, on_delete=models.SET_NULL, null=True, blank=True)
-    def __str__(self): return f"{self.workflow.nome} - {self.ordem}: {self.nome}"
-    class Meta:
-        ordering = ['workflow', 'ordem']
-        unique_together = ('workflow', 'ordem')
-
-class TarefaPadraoWorkflow(models.Model):
-    fase = models.ForeignKey(FaseWorkflow, on_delete=models.CASCADE, related_name='tarefas_padrao')
-    tipo_tarefa = models.ForeignKey(TipoTarefa, on_delete=models.PROTECT)
-    responsavel_override = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
-    ordem = models.PositiveIntegerField(default=0, blank=False, null=False)
-    class Meta:
-        # ===== ADICIONE ESTA LINHA PARA ORDENAR POR PADRÃO =====
-        ordering = ['ordem']
-        # =======================================================
-
-    def __str__(self): return self.tipo_tarefa.nome
-
-class RegraWorkflow(models.Model):
-    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
-    produto = models.ForeignKey(Produto, on_delete=models.CASCADE)
-    workflow = models.ForeignKey(Workflow, on_delete=models.CASCADE)
-    def __str__(self): return f"Regra: {self.cliente} + {self.produto}"
-    class Meta:
-        unique_together = ('cliente', 'produto')
-        verbose_name = "Regra de Workflow"
-        verbose_name_plural = "Regras de Workflow"
-
 class FluxoInterno(models.Model):
     caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='fluxo_interno') # related_name mudou
     data_fluxo = models.DateField(verbose_name="Data") # Renomeado de data_andamento
@@ -283,98 +211,6 @@ class FluxoInterno(models.Model):
         verbose_name = "Fluxo Interno"
         verbose_name_plural = "Fluxo Interno"
 
-class Tarefa(models.Model):
-    STATUS_TAREFA_CHOICES = (('P', 'Pendente'), ('A', 'Em Andamento'), ('C', 'Concluída'))
-    caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='tarefas')
-    tipo_tarefa = models.ForeignKey(TipoTarefa, on_delete=models.PROTECT, verbose_name="Tipo de Tarefa")
-    status = models.CharField(max_length=1, choices=STATUS_TAREFA_CHOICES, default='P')
-    data_criacao = models.DateTimeField(auto_now_add=True)
-    data_conclusao = models.DateTimeField(blank=True, null=True, verbose_name="Data de Conclusão Real")
-    responsavel = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
-    observacao = models.TextField(blank=True)
-    
-    # ESTE É O NOSSO CAMPO DE PRAZO
-    prazo_final = models.DateField(blank=True, null=True, verbose_name="Prazo Final")
-    
-    descricao_conclusao = models.TextField(blank=True, verbose_name="Descrição da Conclusão")
-    origem_fase_workflow = models.ForeignKey(FaseWorkflow, on_delete=models.SET_NULL, null=True, blank=True, help_text="Fase do workflow que gerou esta tarefa.")
-
-    def __str__(self):
-        return f"{self.tipo_tarefa.nome} - Caso #{self.caso.id}"
-    
-    @property
-    def data_conclusao_prevista(self):
-        # 1. Se um prazo final foi definido manualmente, ele tem prioridade.
-        if self.prazo_final:
-            return self.prazo_final
-        
-        # 2. Se não, calcula o prazo padrão a partir do tipo de tarefa.
-        if self.tipo_tarefa and self.data_criacao:
-            # ... (sua lógica de cálculo de dias úteis/corridos continua aqui)
-            if self.tipo_tarefa.tipo_prazo == 'C':
-                return self.data_criacao.date() + timedelta(days=self.tipo_tarefa.prazo_dias)
-            else:
-                dias_uteis_adicionados = 0
-                data_atual = self.data_criacao.date()
-                while dias_uteis_adicionados < self.tipo_tarefa.prazo_dias:
-                    data_atual += timedelta(days=1)
-                    if data_atual.weekday() < 5:
-                        dias_uteis_adicionados += 1
-                return data_atual
-        
-        return None
-
-    class Meta:
-        ordering = ['data_criacao']
-    STATUS_TAREFA_CHOICES = (('P', 'Pendente'), ('A', 'Em Andamento'), ('C', 'Concluída'))
-    caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='tarefas')
-    tipo_tarefa = models.ForeignKey(TipoTarefa, on_delete=models.PROTECT, verbose_name="Tipo de Tarefa")
-    status = models.CharField(max_length=1, choices=STATUS_TAREFA_CHOICES, default='P')
-    data_criacao = models.DateTimeField(auto_now_add=True)
-    data_conclusao = models.DateTimeField(blank=True, null=True, verbose_name="Data de Conclusão Real")
-    responsavel = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
-    observacao = models.TextField(blank=True)
-    prazo_final = models.DateField(blank=True, null=True, verbose_name="Prazo Final")
-    descricao_conclusao = models.TextField(blank=True, verbose_name="Descrição da Conclusão")
-    origem_fase_workflow = models.ForeignKey(FaseWorkflow, on_delete=models.SET_NULL, null=True, blank=True, help_text="Fase do workflow que gerou esta tarefa.")
-    def __str__(self): return f"{self.tipo_tarefa.nome} - Caso #{self.caso.id}"
-    @property
-    @property
-    def prazo_calculado(self):
-        """
-        Calcula a data de conclusão prevista para a tarefa.
-        Dá prioridade MÁXIMA para o campo 'prazo_final' se ele for preenchido.
-        Caso contrário, calcula com base no prazo padrão do Tipo de Tarefa.
-        """
-        # 1. Se um prazo final foi definido manualmente, ele é a resposta.
-        if self.prazo_final:
-            return self.prazo_final
-        
-        # 2. Se não, continua com o cálculo padrão.
-        if self.tipo_tarefa and self.data_criacao:
-            # Cálculo para dias corridos
-            if self.tipo_tarefa.tipo_prazo == 'C':
-                return self.data_criacao.date() + timedelta(days=self.tipo_tarefa.prazo_dias)
-            # Cálculo para dias úteis
-            else:
-                dias_uteis_adicionados = 0
-                data_atual = self.data_criacao.date()
-                dias_a_adicionar = self.tipo_tarefa.prazo_dias
-                
-                # Otimização para não contar o dia da criação se for dia útil
-                if data_atual.weekday() < 5:
-                    dias_a_adicionar -= 1
-                
-                while dias_uteis_adicionados < dias_a_adicionar:
-                    data_atual += timedelta(days=1)
-                    if data_atual.weekday() < 5: # 0-4 são Seg-Sex
-                        dias_uteis_adicionados += 1
-                return data_atual
-        
-        # Retorna None se não for possível calcular de nenhuma forma
-        return None
-    class Meta:
-        ordering = ['data_criacao']
 
 
 
@@ -382,10 +218,25 @@ class Timesheet(models.Model):
     caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='timesheets')
     data_execucao = models.DateField(verbose_name="Data de Execução")
     profissional = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, verbose_name="Profissional")
-    tempo = models.DurationField(verbose_name="Tempo Gasto (HH:MM)")
+    
+    # --- A GRANDE MUDANÇA ESTÁ AQUI ---
+    minutos_gastos = models.PositiveIntegerField(default=0, verbose_name="Tempo Gasto (em minutos)")
+    
     descricao = models.TextField(verbose_name="Descrição da Atividade")
     data_cadastro = models.DateTimeField(auto_now_add=True)
-    def __str__(self): return f"Lançamento de {self.profissional.username} em {self.data_execucao.strftime('%d/%m/%Y')}"
+
+    @property
+    def tempo_formatado(self):
+        """Retorna o tempo no formato HH:MM para exibição."""
+        if not self.minutos_gastos:
+            return "00:00"
+        horas = self.minutos_gastos // 60
+        minutos = self.minutos_gastos % 60
+        return f"{horas:02d}:{minutos:02d}"
+
+    def __str__(self):
+        return f"Lançamento de {self.profissional.username} em {self.data_execucao.strftime('%d/%m/%Y')}"
+
     class Meta:
         ordering = ['-data_execucao']
 
@@ -446,3 +297,151 @@ class GraphWebhookSubscription(models.Model):
 
     def __str__(self):
         return f"Webhook for {self.user.username}"
+    
+
+
+class FluxoTrabalho(models.Model):
+    nome = models.CharField(max_length=200, unique=True)
+    descricao = models.TextField(blank=True)
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
+    produto = models.ForeignKey(Produto, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.nome
+
+    class Meta:
+        verbose_name = "Fluxo de Trabalho"
+        verbose_name_plural = "1. Fluxos de Trabalho" # O '1.' ajuda a ordenar no Admin
+        unique_together = ('cliente', 'produto')
+
+class EtapaFluxo(models.Model):
+    fluxo_trabalho = models.ForeignKey(FluxoTrabalho, on_delete=models.CASCADE, related_name='etapas')
+    nome = models.CharField(max_length=100)
+    ordem = models.PositiveIntegerField(default=0)
+    sla_dias = models.PositiveIntegerField(default=0, verbose_name="SLA (dias)", help_text="Prazo ideal em dias para esta etapa. 0 para sem SLA.")
+
+    def __str__(self):
+        return f"{self.fluxo_trabalho.nome} - Etapa {self.ordem}: {self.nome}"
+
+    class Meta:
+        ordering = ['fluxo_trabalho', 'ordem']
+        unique_together = ('fluxo_trabalho', 'ordem')
+        verbose_name = "Etapa do Fluxo"
+        verbose_name_plural = "2. Etapas dos Fluxos"
+
+class AcaoEtapa(models.Model):
+    PRAZO_CHOICES = [
+        ('corridos', 'Dias Corridos'),
+        ('uteis', 'Dias Úteis'),
+    ]
+    TIPO_RESPONSAVEL_CHOICES = [
+        ('CRIADOR_ACAO', 'Usuário que Concluiu a Ação Anterior'),
+        ('RESPONSAVEL_CASO', 'Responsável Pelo Caso'),
+        ('USUARIO_FIXO', 'Usuário Fixo (especificar abaixo)'),
+    ]
+
+    etapa_fluxo = models.ForeignKey(EtapaFluxo, on_delete=models.CASCADE, related_name='acoes')
+    titulo = models.CharField(max_length=200, verbose_name="Título da Ação/Tarefa")
+    instrucoes = models.TextField(blank=True, verbose_name="Instruções Padrão")
+    
+    prazo_dias = models.PositiveIntegerField(
+        default=0, 
+        verbose_name="Prazo (em dias)",
+        help_text="Número de dias para concluir a tarefa após sua criação. 0 para sem prazo."
+    )
+    tipo_prazo = models.CharField(
+        max_length=10, 
+        choices=PRAZO_CHOICES, 
+        default='uteis', 
+        verbose_name="Tipo de Prazo"
+    )
+    
+    tipo_responsavel = models.CharField(
+        max_length=20,
+        choices=TIPO_RESPONSAVEL_CHOICES,
+        default='CRIADOR_ACAO',
+        verbose_name="Atribuir Responsável Para"
+    )
+    
+    responsavel_fixo = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Usuário Fixo",
+        help_text="Usado apenas se o tipo acima for 'Usuário Fixo'."
+    )
+
+    def __str__(self):
+        return self.titulo
+
+    class Meta:
+        verbose_name = "Ação da Etapa"
+        verbose_name_plural = "3. Ações das Etapas"
+
+class OpcaoDecisao(models.Model):
+    acao_etapa = models.ForeignKey(AcaoEtapa, on_delete=models.CASCADE, related_name='opcoes_decisao')
+    label_do_botao = models.CharField(max_length=100, verbose_name="Texto do Botão de Decisão")
+    
+    # Ações de Workflow
+    avancar_proxima_etapa = models.BooleanField(default=False, verbose_name="Avançar para Próxima Etapa?")
+    mudar_etapa_para = models.ForeignKey(EtapaFluxo, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Mover para a Etapa Específica")
+    
+    # Ações de Tarefa
+    criar_nova_acao = models.ForeignKey(AcaoEtapa, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Criar Nova Ação/Tarefa", related_name='+')
+    aguardar_dias = models.PositiveIntegerField(default=0, verbose_name="Aguardar (dias)", help_text="Cria uma tarefa de lembrete para o futuro. 0 para desativado.")
+    
+    # Ações de Dados e Comunicação
+    atualizar_status_caso = models.ForeignKey(Status, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Atualizar Status do Caso para")
+    enviar_email = models.BooleanField(default=False, verbose_name="Enviar E-mail Automático?")
+    modelo_email = models.ForeignKey('notificacoes.TemplateEmail', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Usar Modelo de E-mail")
+    # Adicionar campo para destinatários depois, se necessário
+
+    def __str__(self):
+        return f"Opção '{self.label_do_botao}' para a ação '{self.acao_etapa.titulo}'"
+    
+    class Meta:
+        verbose_name = "Opção de Decisão"
+        verbose_name_plural = "4. Opções de Decisão"
+
+
+class InstanciaAcao(models.Model):
+    STATUS_CHOICES = [('P', 'Pendente'), ('C', 'Concluída')]
+
+    caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='acoes_em_andamento')
+    acao_modelo = models.ForeignKey(AcaoEtapa, on_delete=models.PROTECT, verbose_name="Ação a ser executada")
+    status = models.CharField(max_length=1, choices=STATUS_CHOICES, default='P')
+    responsavel = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_conclusao = models.DateTimeField(null=True, blank=True)
+    descricao_conclusao = models.TextField(blank=True)
+    prazo_final = models.DateTimeField(null=True, blank=True, verbose_name="Prazo Final")
+
+    def __str__(self):
+        return f"Ação '{self.acao_modelo.titulo}' para o Caso #{self.caso.id}"
+
+    class Meta:
+        verbose_name = "Instância de Ação"
+        verbose_name_plural = "Instâncias de Ações"
+
+class HistoricoEtapa(models.Model):
+    caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='historico_etapas')
+    etapa = models.ForeignKey(EtapaFluxo, on_delete=models.PROTECT)
+    data_entrada = models.DateTimeField(auto_now_add=True)
+    data_saida = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def tempo_na_etapa(self):
+        if self.data_saida:
+            delta = self.data_saida - self.data_entrada
+            return f"{delta.days} dias" if delta.days > 0 else "Menos de 1 dia"
+        return "Em andamento"
+
+    def __str__(self):
+        return f"Caso #{self.caso.id} na etapa '{self.etapa.nome}'"
+    
+    class Meta:
+        ordering = ['-data_entrada']
+        verbose_name = "Histórico de Etapa"
+        verbose_name_plural = "Históricos de Etapas"
+

@@ -1,30 +1,9 @@
 # notificacoes/servicos.py
 
-from django.template import Template, Context
-from django.core.mail import EmailMessage
-from django.utils import timezone
-from .models import TemplateEmail, ConfiguracaoEmail
-
-# Importa os modelos corretos do app 'casos'
-from casos.models import FluxoInterno, Caso
-
-# notificacoes/servicos.py
-
-from django.template import Template, Context
-from django.core.mail import EmailMessage
-from django.utils import timezone
-from .models import TemplateEmail, ConfiguracaoEmail
-from casos.models import FluxoInterno, Caso
-from django.template.loader import render_to_string
-from .models import Evento, Notificacao
-from casos.microsoft_graph_service import enviar_email as enviar_email_graph
-
 import json
 from django.template import Template, Context
 from django.utils import timezone
-from django.core.mail import EmailMessage
-from core.models import ConfiguracaoEmail
-from notificacoes.models import TemplateEmail
+from .models import TemplateEmail
 from casos.models import Caso, FluxoInterno
 from casos.microsoft_graph_service import enviar_email as enviar_email_graph
 
@@ -34,7 +13,6 @@ def enviar_notificacao(slug_evento, contexto, anexo_buffer=None, nome_anexo=None
     e registrar a comunicação no Fluxo Interno do caso.
     """
     
-    # --- BUSCAR TEMPLATE DO E-MAIL ---
     try:
         template_email = TemplateEmail.objects.get(evento__slug=slug_evento, ativo=True)
     except TemplateEmail.DoesNotExist:
@@ -42,7 +20,6 @@ def enviar_notificacao(slug_evento, contexto, anexo_buffer=None, nome_anexo=None
     except TemplateEmail.MultipleObjectsReturned:
         template_email = TemplateEmail.objects.filter(evento__slug=slug_evento, ativo=True).first()
 
-    # --- RENDERIZAR ASSUNTO E CORPO ---
     try:
         template_assunto = Template(template_email.assunto)
         template_corpo = Template(template_email.corpo)
@@ -52,7 +29,6 @@ def enviar_notificacao(slug_evento, contexto, anexo_buffer=None, nome_anexo=None
     except Exception as e:
         return False, f"Erro ao processar o template: {e}"
 
-    # --- MONTAR LISTA DE DESTINATÁRIOS ---
     lista_emails = []
     if template_email.destinatarios_fixos:
         lista_emails.extend([email.strip() for email in template_email.destinatarios_fixos.split(',') if email.strip()])
@@ -65,28 +41,23 @@ def enviar_notificacao(slug_evento, contexto, anexo_buffer=None, nome_anexo=None
     if not destinatarios_finais:
         return False, "Nenhum destinatário configurado para este evento."
 
-    # --- OBTER O REMETENTE ---
     usuario_acao = contexto.get('usuario_acao')
     if not usuario_acao or not usuario_acao.email:
         return False, "Erro: O usuário que disparou a ação não tem um e-mail válido para ser o remetente."
 
-    # --- CRIAR E ENVIAR O E-MAIL VIA MICROSOFT GRAPH ---
     try:
         destinatarios_str = ", ".join(destinatarios_finais)
         
-        # Chama nosso novo serviço de envio via Microsoft Graph
         sucesso = enviar_email_graph(
             remetente_email=usuario_acao.email,
             para=destinatarios_str,
             assunto=assunto_final,
             corpo=corpo_final,
-            # (Ainda não implementamos anexos nesta nova função, mas podemos adicionar depois)
         )
         
         if not sucesso:
             return False, "O serviço da Microsoft retornou uma falha ao tentar enviar o e-mail."
 
-        # --- REGISTRO NO FLUXO INTERNO ---
         caso_obj = contexto.get('caso')
         if caso_obj and isinstance(caso_obj, Caso):
             resumo_email = f"Evento: {template_email.evento.nome}"

@@ -1,0 +1,64 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Lançamento de Horas{% endblock %}
+{% block page_title %}{% if object %}Editar{% else %}Novo{% endif %} Lançamento de Horas{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.data_execucao.id_for_label }}" class="form-label">{{ form.data_execucao.label }}</label>
+                        {{ form.data_execucao }}
+                        {% if form.data_execucao.errors %}<div class="text-danger small mt-1">{{ form.data_execucao.errors|striptags }}</div>{% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.profissional.id_for_label }}" class="form-label">{{ form.profissional.label }}</label>
+                        {{ form.profissional }}
+                        {% if form.profissional.errors %}<div class="text-danger small mt-1">{{ form.profissional.errors|striptags }}</div>{% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.tempo_str.id_for_label }}" class="form-label">{{ form.tempo_str.label }}</label>
+                        {{ form.tempo_str }}
+                        {% if form.tempo_str.errors %}<div class="text-danger small mt-1">{{ form.tempo_str.errors|striptags }}</div>{% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.descricao.id_for_label }}" class="form-label">{{ form.descricao.label }}</label>
+                        {{ form.descricao }}
+                        {% if form.descricao.errors %}<div class="text-danger small mt-1">{{ form.descricao.errors|striptags }}</div>{% endif %}
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                    <a href="{{ request.META.HTTP_REFERER|default:'/' }}" class="btn btn-secondary">Cancelar</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script src="https://unpkg.com/imask"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const tempoInput = document.querySelector('.time-mask');
+    if (tempoInput) {
+        IMask(tempoInput, { 
+            mask: 'HH:MM', 
+            blocks: { 
+                HH: { mask: IMask.MaskedRange, from: 0, to: 99 }, 
+                MM: { mask: IMask.MaskedRange, from: 0, to: 59, pad: "0", maxLength: 2 } 
+            } 
+        });
+    }
+});
+</script>
+{% endblock %}

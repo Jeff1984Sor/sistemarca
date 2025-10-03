@@ -152,6 +152,8 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 
 WEBHOOK_BASE_URL = os.environ.get('WEBHOOK_BASE_URL')
 
+STATICFILES_DIRS = [BASE_DIR / 'static']
+
 SHAREPOINT_SITE_URL = "rcostaadvcombr.sharepoint.com"
 SHAREPOINT_DRIVE_ID = os.environ.get('SHAREPOINT_DRIVE_ID')
 

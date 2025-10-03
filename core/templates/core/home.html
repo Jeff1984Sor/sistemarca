@@ -48,18 +48,18 @@
 <div class="row">
     <div class="col-lg-6 mb-4">
         <div class="card shadow-sm h-100">
-            <div class="card-header py-3"><h6 class="m-0 fw-bold text-primary">Minhas Tarefas para Hoje</h6></div>
+            <div class="card-header py-3"><h6 class="m-0 fw-bold text-primary">Minhas Ações para Hoje</h6></div>
             <div class="list-group list-group-flush">
-                {% for tarefa in minhas_tarefas_pendentes %}
-                    <a href="{% url 'casos:caso_detail' tarefa.caso.pk %}#tarefas-tab-pane" class="list-group-item list-group-item-action">
+                {% for acao in tarefas_para_hoje %}
+                    <a href="{% url 'casos:caso_detail' acao.caso.pk %}#acoes-tab-pane" class="list-group-item list-group-item-action">
                         <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1">{{ tarefa.tipo_tarefa.nome }}</h6>
+                            <h6 class="mb-1">{{ acao.acao_modelo.titulo }}</h6>
                             <small class="text-danger">Prazo: Hoje</small>
                         </div>
-                        <p class="mb-1 small text-muted"><strong>Caso:</strong> {{ tarefa.caso.titulo_caso|truncatechars:60 }}</p>
+                        <p class="mb-1 small text-muted"><strong>Caso:</strong> {{ acao.caso.titulo_caso|truncatechars:60 }}</p>
                     </a>
                 {% empty %}
-                    <div class="list-group-item text-success"><i class="bi bi-check-circle-fill"></i> Nenhuma tarefa com prazo para hoje!</div>
+                    <div class="list-group-item text-success"><i class="bi bi-check-circle-fill me-2"></i>Nenhuma ação com prazo para hoje!</div>
                 {% endfor %}
             </div>
         </div>

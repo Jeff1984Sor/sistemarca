@@ -4,133 +4,23 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
 # Importações dos modelos e serviços necessários
-from .models import Caso, RegraWorkflow, Tarefa, FaseWorkflow, HistoricoFase, Timesheet, AndamentoCaso
-from notificacoes.servicos import enviar_notificacao
+from .models import Caso,Timesheet, AndamentoCaso
 
-# ==============================================================================
-# SINAL 1: AÇÕES NA CRIAÇÃO DE UM NOVO CASO
-# ==============================================================================
-@receiver(post_save, sender=Caso)
-def acoes_novo_caso(sender, instance, created, **kwargs):
-    if created:
-        # Ação 1: Iniciar o workflow (continua aqui)
-        if not instance.fase_atual_workflow:
-            try:
-                regra = RegraWorkflow.objects.get(cliente=instance.cliente, produto=instance.produto)
-                primeira_fase = regra.workflow.fases.order_by('ordem').first()
-                if primeira_fase:
-                    mudar_de_fase(instance, nova_fase=primeira_fase)
-            except RegraWorkflow.DoesNotExist:
-                pass
 
-        # Ação 2: Enviar notificação por e-mail (continua aqui)
-        contexto = {
-            'caso': instance,
-            'cliente': instance.cliente,
-            'usuario_acao': None
-        }
-        enviar_notificacao(slug_evento='novo-caso-criado', contexto=contexto)
-    """
-    Quando um novo caso é criado, esta função dispara duas ações:
-    1. Aplica o workflow inicial.
-    2. Envia a notificação de "novo caso criado".
-    """
-    if created:
-        # Ação 1: Iniciar o workflow
-        if not instance.fase_atual_workflow:
-            try:
-                regra = RegraWorkflow.objects.get(cliente=instance.cliente, produto=instance.produto)
-                primeira_fase = regra.workflow.fases.order_by('ordem').first()
-                if primeira_fase:
-                    mudar_de_fase(instance, nova_fase=primeira_fase)
-            except RegraWorkflow.DoesNotExist:
-                pass # Nenhuma regra de workflow encontrada, não faz nada.
-    try:
-            token = get_sharepoint_token()
-            nome_pasta_caso = f"{instance.id} - {instance.titulo_caso}"
-            
-            pasta_criada = criar_pasta_caso(token, nome_pasta_caso)
-            
-            if pasta_criada:
-                id_pasta_pai = pasta_criada['id']
-                # Pega os nomes das subpastas a partir da configuração do Produto
-                subpastas = [p.nome_pasta for p in instance.produto.estrutura_pastas.all()]
-                if subpastas:
-                    criar_subpastas(token, id_pasta_pai, subpastas)
-    except Exception as e:
-            print(f"ERRO CRÍTICO NA INTEGRAÇÃO COM SHAREPOINT: {e}")
-            # Aqui você pode adicionar uma lógica para notificar o admin do erro
-        # Ação 2: Enviar notificação por e-mail
-    contexto = {
-            'caso': instance,
-            'cliente': instance.cliente,
-            'usuario_acao': None # Ação do sistema
-        }
-    enviar_notificacao(slug_evento='novo-caso-criado', contexto=contexto)
 
-# ==============================================================================
-# SINAL 2: VERIFICAR AVANÇO DE FASE AO CONCLUIR TAREFA
-# ==============================================================================
-@receiver(post_save, sender=Tarefa)
-def verificar_conclusao_da_fase(sender, instance, **kwargs):
-    """
-    Quando uma tarefa é concluída, verifica se todas as tarefas da fase
-    foram finalizadas para então avançar o workflow.
-    """
-    if instance.status == 'C' and instance.origem_fase_workflow:
-        caso = instance.caso
-        fase_concluida = instance.origem_fase_workflow
-
-        if caso.fase_atual_workflow != fase_concluida:
-            return # Proteção contra execução dupla
-
-        tarefas_restantes = Tarefa.objects.filter(caso=caso, origem_fase_workflow=fase_concluida, status__in=['P', 'A']).exists()
-
-        if not tarefas_restantes:
-            ordem_atual = fase_concluida.ordem
-            proxima_fase = fase_concluida.workflow.fases.filter(ordem__gt=ordem_atual).order_by('ordem').first()
-            mudar_de_fase(caso, nova_fase=proxima_fase)
-
-# ==============================================================================
-# SINAL 3: REGISTRAR TIMESHEET NO ANDAMENTO
-# ==============================================================================
-@receiver(post_save, sender=Timesheet)
 @receiver(post_save, sender=Timesheet)
 def registrar_timesheet_no_andamento(sender, instance, created, **kwargs):
     """
-    Quando um novo Timesheet é criado, cria um registro de Andamento
-    correspondente COM TODOS OS DETALHES.
+    Toda vez que um novo Timesheet é criado, este signal cria um registro
+    correspondente no Andamento do Caso.
     """
     if created:
-        # Formata o tempo de 'timedelta' para 'HH:MM'
-        total_seconds = int(instance.tempo.total_seconds())
-        horas = total_seconds // 3600
-        minutos = (total_seconds % 3600) // 60
-        tempo_formatado = f"{horas:02d}:{minutos:02d}"
-        
-        # Formata a data de execução
-        data_execucao_formatada = instance.data_execucao.strftime("%d/%m/%Y")
-        
-        # Pega o nome do profissional
-        nome_profissional = instance.profissional.get_full_name() or instance.profissional.username
-
-        # ==========================================================
-        # ===== NOVA DESCRIÇÃO, AGORA COMPLETA E DETALHADA =====
-        # ==========================================================
-        descricao_andamento = (
-            f"--- Timesheet ---\n"
-            f"Data da Execução: {data_execucao_formatada}\n"
-            f"Profissional: {nome_profissional}\n"
-            f"Tempo Gasto: {tempo_formatado}\n"
-            f"Descrição: {instance.descricao}"
-        )
-        
+        # Cria uma única entrada de andamento, usando a data de execução do timesheet
         AndamentoCaso.objects.create(
             caso=instance.caso,
-            descricao=descricao_andamento,
+            data_andamento=instance.data_execucao,
             usuario_criacao=instance.profissional,
-            # Usa a data do lançamento como a data do andamento
-            data_andamento=instance.data_execucao 
+            descricao=f"Lançamento de Timesheet realizado ({instance.tempo_formatado}):\n{instance.descricao}"
         )
 # ==============================================================================
 # FUNÇÃO AUXILIAR: LÓGICA CENTRAL PARA MUDAR DE FASE

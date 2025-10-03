@@ -1,61 +1,65 @@
+import nested_admin
 from django.contrib import admin
 from .models import (
-    Caso, Produto, Campo, ValorCampoCaso, FluxoInterno, Tarefa, 
-    Timesheet, TipoTarefa, FaseWorkflow, Advogado, Status, Analista, 
-    Cliente, Workflow, AndamentoCaso, EstruturaPasta, 
-    EmailTemplate, UserSignature, EmailCaso
+    Caso, Produto, Campo, ValorCampoCaso, FluxoInterno, Timesheet, 
+    Advogado, Status, Cliente, AndamentoCaso, EstruturaPasta, 
+    EmailTemplate, UserSignature, EmailCaso,
+    FluxoTrabalho, EtapaFluxo, AcaoEtapa, OpcaoDecisao, InstanciaAcao, HistoricoEtapa
 )
 
-# Não precisamos mais dos 'admin.site.register' simples aqui,
-# pois usaremos os decoradores que são mais organizados.
+class OpcaoDecisaoInline(nested_admin.NestedStackedInline):
+    model = OpcaoDecisao
+    extra = 1
+    fk_name = 'acao_etapa'
+    fieldsets = (
+        (None, {'fields': ('label_do_botao',)}),
+        ('Ações de Workflow & Ações', {'classes': ('collapse',), 'fields': ('avancar_proxima_etapa', 'mudar_etapa_para', 'criar_nova_acao', 'aguardar_dias')}),
+        ('Ações de Dados & Comunicação', {'classes': ('collapse',), 'fields': ('atualizar_status_caso', 'enviar_email', 'modelo_email')}),
+    )
+
+class AcaoEtapaInline(nested_admin.NestedStackedInline):
+    model = AcaoEtapa
+    extra = 1
+    inlines = [OpcaoDecisaoInline]
+    fk_name = 'etapa_fluxo'
+    fieldsets = (
+        ('Definição da Ação', {'fields': ('titulo', 'instrucoes')}),
+        ('Prazo', {'fields': (('prazo_dias', 'tipo_prazo'),)}),
+        ('Atribuição de Responsável', {'fields': ('tipo_responsavel', 'responsavel_fixo')}),
+    )
+
+class EtapaFluxoInline(nested_admin.NestedTabularInline):
+    model = EtapaFluxo
+    extra = 1
+    inlines = [AcaoEtapaInline]
+    fk_name = 'fluxo_trabalho'
+    ordering = ('ordem',)
+
+@admin.register(FluxoTrabalho)
+class FluxoTrabalhoAdmin(nested_admin.NestedModelAdmin):
+    list_display = ('nome', 'cliente', 'produto')
+    inlines = [EtapaFluxoInline]
+    fieldsets = ((None, {'fields': ('nome', 'descricao', ('cliente', 'produto'))}),)
 
 @admin.register(Caso)
 class CasoAdmin(admin.ModelAdmin):
-    list_display = ('id', 'titulo_caso', 'cliente', 'produto', 'status', 'data_entrada_rca')
+    list_display = ('id', 'titulo_caso', 'cliente', 'produto', 'status', 'etapa_atual')
     search_fields = ('titulo_caso', 'id')
-    list_filter = ('cliente', 'produto', 'status')
+    list_filter = ('cliente', 'produto', 'status', 'etapa_atual')
 
-@admin.register(Produto)
-class ProdutoAdmin(admin.ModelAdmin):
-    list_display = ('nome',)
-    search_fields = ('nome',)
-
-@admin.register(Campo)
-class CampoAdmin(admin.ModelAdmin):
-    list_display = ('nome_label', 'nome_tecnico', 'tipo_campo')
-    search_fields = ('nome_label', 'nome_tecnico')
-
-@admin.register(EmailTemplate)
-class EmailTemplateAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'assunto')
-    search_fields = ('nome', 'assunto', 'corpo')
-
-@admin.register(UserSignature)
-class UserSignatureAdmin(admin.ModelAdmin):
-    list_display = ('usuario', 'nome', 'is_default')
-    list_filter = ('usuario',)
-    search_fields = ('usuario__username', 'nome')
-
-@admin.register(EmailCaso)
-class EmailCasoAdmin(admin.ModelAdmin):
-    list_display = ('caso', 'assunto', 'de', 'para', 'data_envio', 'is_sent')
-    list_filter = ('caso', 'is_sent', 'data_envio')
-    search_fields = ('assunto', 'de', 'para', 'corpo_html')
-    readonly_fields = ('caso', 'microsoft_message_id', 'de', 'para', 'assunto', 'preview', 'corpo_html', 'data_envio', 'is_sent', 'thread_id')
-    
-    def has_add_permission(self, request):
-        return False
-
-# Registra os modelos que não precisam de uma classe Admin customizada
+# --- REGISTRO DOS OUTROS MODELOS ---
+# (Pode adicionar @admin.register para cada um se quiser customizar)
+admin.site.register(Produto)
+admin.site.register(Campo)
 admin.site.register(ValorCampoCaso)
 admin.site.register(FluxoInterno)
-admin.site.register(Tarefa)
 admin.site.register(Timesheet)
-admin.site.register(TipoTarefa)
-admin.site.register(FaseWorkflow)
 admin.site.register(Advogado)
 admin.site.register(Status)
-admin.site.register(Analista)
-admin.site.register(Workflow)
 admin.site.register(AndamentoCaso)
 admin.site.register(EstruturaPasta)
+admin.site.register(EmailTemplate)
+admin.site.register(UserSignature)
+admin.site.register(EmailCaso)
+admin.site.register(InstanciaAcao)
+admin.site.register(HistoricoEtapa)
