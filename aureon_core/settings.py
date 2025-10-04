@@ -29,7 +29,7 @@ if not IS_PRODUCTION and NGROK_HOSTNAME:
 INSTALLED_APPS = [
     'admin_interface', 
     'colorfield', 
-    'django_auth_adfs',
+   # 'django_auth_adfs',
     'nested_admin',
     'django.contrib.admin', 
     'django.contrib.auth', 
