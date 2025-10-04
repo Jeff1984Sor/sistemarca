@@ -1,4 +1,4 @@
-# casos/models.py
+# casos/models.py (CORRIGIDO)
 
 from django.db import models
 from django.conf import settings
@@ -57,17 +57,8 @@ class OpcaoCampo(models.Model):
         verbose_name_plural = "Opções de Campos de Lista"
         unique_together = ('campo', 'valor') # Evita opções duplicadas para o mesmo campo
     
-    nome_label = models.CharField(max_length=100, unique=True, verbose_name="Nome de Exibição do Campo")
-    nome_tecnico = models.SlugField(max_length=100, unique=True, help_text="Nome interno do campo (automático), ex: 'valor_causa'")
-    
-        
-    class Meta:
-        verbose_name = "Campo Customizado"
-        verbose_name_plural = "Campos Customizados"
-        ordering = ['nome_label']
-
-    def __str__(self):
-        return self.valor
+# ATENÇÃO: Havia uma duplicação de definições aqui, eu removi as linhas extras que pareciam erradas.
+# Se você tinha intenção de ter mais campos aqui, eles precisam ser adicionados dentro da classe acima.
 
 class EstruturaPasta(models.Model):
     nome_pasta = models.CharField(max_length=100, verbose_name="Nome da Subpasta")
@@ -101,7 +92,10 @@ class RegraCampo(models.Model):
     )
 
     def __str__(self):
-        return f"Regra de Campos para: {self.cliente} + {self.produto}"
+        # Tornando este também mais seguro
+        cliente_nome = self.cliente.nome_razao_social if self.cliente else "Cliente não definido"
+        produto_nome = self.produto.nome if self.produto else "Produto não definido"
+        return f"Regra de Campos para: {cliente_nome} + {produto_nome}"
 
     class Meta:
         unique_together = ('cliente', 'produto')
@@ -129,8 +123,8 @@ class Caso(models.Model):
 
     @property
     def dias_na_fase_atual(self):
-        if not self.fase_atual_workflow or not self.data_entrada_fase:
-            return 0
+        if not self.etapa_atual or not self.data_entrada_fase:
+             return 0
         delta = timezone.now() - self.data_entrada_fase
         return max(delta.days, 1)
 
@@ -188,7 +182,16 @@ class ValorCampoCaso(models.Model):
 
 class Advogado(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name="Usuário do Sistema")
-    def __str__(self): return self.user.get_full_name() or self.user.username
+    
+    # ===== AQUI ESTÁ A CORREÇÃO PRINCIPAL =====
+    def __str__(self):
+        try:
+            # Tenta acessar o usuário e retornar o nome
+            return self.user.get_full_name() or self.user.username
+        except User.DoesNotExist:
+            # Se o usuário não existe mais, retorna um texto seguro
+            return f"Advogado (ID: {self.id}) - Usuário removido"
+    # ==========================================
 
 class Status(models.Model):
     nome = models.CharField(max_length=50, unique=True)
@@ -235,7 +238,10 @@ class Timesheet(models.Model):
         return f"{horas:02d}:{minutos:02d}"
 
     def __str__(self):
-        return f"Lançamento de {self.profissional.username} em {self.data_execucao.strftime('%d/%m/%Y')}"
+        # Também tornei este mais seguro, como boa prática
+        if self.profissional:
+            return f"Lançamento de {self.profissional.username} em {self.data_execucao.strftime('%d/%m/%Y')}"
+        return f"Lançamento (sem profissional) em {self.data_execucao.strftime('%d/%m/%Y')}"
 
     class Meta:
         ordering = ['-data_execucao']
@@ -261,7 +267,9 @@ class UserSignature(models.Model):
     is_default = models.BooleanField(default=False, verbose_name="É a assinatura padrão?")
 
     def __str__(self):
-        return f"{self.usuario.username} - {self.nome}"
+        if self.usuario:
+            return f"{self.usuario.username} - {self.nome}"
+        return f"Assinatura (sem usuário) - {self.nome}"
 
     class Meta:
         verbose_name = "Assinatura de Usuário"
@@ -296,7 +304,9 @@ class GraphWebhookSubscription(models.Model):
     expiration_datetime = models.DateTimeField()
 
     def __str__(self):
-        return f"Webhook for {self.user.username}"
+        if self.user:
+            return f"Webhook for {self.user.username}"
+        return f"Webhook (usuário deletado)"
     
 
 
@@ -444,4 +454,3 @@ class HistoricoEtapa(models.Model):
         ordering = ['-data_entrada']
         verbose_name = "Histórico de Etapa"
         verbose_name_plural = "Históricos de Etapas"
-
