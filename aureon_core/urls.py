@@ -10,7 +10,7 @@ import nested_admin
 urlpatterns = [
     # Rotas de ferramentas e administração
     path('admin/', admin.site.urls),
-    path('oauth2/', include('django_auth_adfs.urls')),
+    #path('oauth2/', include('django_auth_adfs.urls')),
     path('nested_admin/', include('nested_admin.urls')),
 
     # Rotas dos seus apps

@@ -88,30 +88,30 @@ TEMPLATES = [
 ]
 
 AUTHENTICATION_BACKENDS = (
-    'contas.auth.CustomAdfsAuthCodeBackend',
+    #'contas.auth.CustomAdfsAuthCodeBackend',
     'django.contrib.auth.backends.ModelBackend',
 )
 
 AUTH_ADFS = {
-    "CLIENT_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
-    "CLIENT_SECRET": os.environ.get('SHAREPOINT_CLIENT_SECRET'),
-    "TENANT_ID": os.environ.get('SHAREPOINT_TENANT_ID'),
-    "RELYING_PARTY_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
-    "AUDIENCE": os.environ.get('SHAREPOINT_CLIENT_ID'),
-    "CLAIM_MAPPING": {
-        "first_name": "given_name",
-        "last_name": "family_name",
-        "email": "upn",
-    },
-    "GROUPS_CLAIM": "groups", 
-    "MIRROR_GROUPS": True,
-    "SCOPES": [
-        "openid", "profile", "email", 
-        "https://graph.microsoft.com/Sites.ReadWrite.All",
-        "https://graph.microsoft.com/Mail.ReadWrite",
-        "https://graph.microsoft.com/Mail.Send",
-        "offline_access"
-    ],
+   # "CLIENT_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
+    #"CLIENT_SECRET": os.environ.get('SHAREPOINT_CLIENT_SECRET'),
+    #"TENANT_ID": os.environ.get('SHAREPOINT_TENANT_ID'),
+    #"RELYING_PARTY_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
+    #"AUDIENCE": os.environ.get('SHAREPOINT_CLIENT_ID'),
+    #"CLAIM_MAPPING": {
+    #    "first_name": "given_name",
+     #   "last_name": "family_name",
+      #  "email": "upn",
+    #},
+    #"GROUPS_CLAIM": "groups", 
+    #"MIRROR_GROUPS": True,
+    #"SCOPES": [
+    #    "openid", "profile", "email", 
+    #    "https://graph.microsoft.com/Sites.ReadWrite.All",
+    #    "https://graph.microsoft.com/Mail.ReadWrite",
+    #    "https://graph.microsoft.com/Mail.Send",
+    #    "offline_access"
+    #],
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -138,7 +138,7 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_REDIRECT_URL = 'home'
 LOGOUT_REDIRECT_URL = 'home'
-LOGIN_URL = 'login'
+LOGIN_URL = 'contas:login'
 X_FRAME_OPTIONS = "SAMEORIGIN"
 SILENCED_SYSTEM_CHECKS = ["security.W019"]
 INTERNAL_IPS = ["127.0.0.1"]
