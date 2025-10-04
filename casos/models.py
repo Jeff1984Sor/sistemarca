@@ -1,11 +1,11 @@
-# casos/models.py (CORRIGIDO)
+# casos/models.py (COMPLETO E 100% CORRIGIDO)
 
 from django.db import models
 from django.conf import settings
 from clientes.models import Cliente
 from datetime import timedelta
 from django.db.models import Sum
-from django.template import Template, Context # Adicione estas importações no topo
+from django.template import Template, Context
 from django.conf import settings
 from django.utils import timezone
 from django.contrib.auth import get_user_model
@@ -13,13 +13,10 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 # ==============================================================================
-# SEÇÃO 1: ESTRUTURA DE CAMPOS DINÂMICOS - O CORAÇÃO DA NOVA LÓGICA
+# SEÇÃO 1: ESTRUTURA DE CAMPOS DINÂMICOS
 # ==============================================================================
 
 class Campo(models.Model):
-    """
-    REGISTRO DE TODOS OS CAMPOS POSSÍVEIS.
-    """
     TIPO_CHOICES = [
         ('text', 'Texto Curto (CharField)'),
         ('textarea', 'Texto Longo (TextField)'),
@@ -29,12 +26,9 @@ class Campo(models.Model):
         ('url', 'Link (URLField)'),
         ('select', 'Lista (Seleção)'),
     ]
-    
-    # ===== OS CAMPOS QUE ESTAVAM FALTANDO ESTÃO AQUI =====
     nome_label = models.CharField(max_length=100, unique=True, verbose_name="Nome de Exibição do Campo")
     nome_tecnico = models.SlugField(max_length=100, unique=True, help_text="Nome interno do campo (automático)")
     tipo_campo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='text')
-    # ====================================================
 
     class Meta:
         verbose_name = "Campo Customizado"
@@ -45,7 +39,6 @@ class Campo(models.Model):
         return self.nome_label
 
 class OpcaoCampo(models.Model):
-    """ Armazena uma opção para um Campo do tipo 'Lista'. """
     campo = models.ForeignKey(Campo, on_delete=models.CASCADE, related_name='opcoes', limit_choices_to={'tipo_campo': 'select'})
     valor = models.CharField(max_length=255)
 
@@ -55,10 +48,7 @@ class OpcaoCampo(models.Model):
     class Meta:
         verbose_name = "Opção de Campo de Lista"
         verbose_name_plural = "Opções de Campos de Lista"
-        unique_together = ('campo', 'valor') # Evita opções duplicadas para o mesmo campo
-    
-# ATENÇÃO: Havia uma duplicação de definições aqui, eu removi as linhas extras que pareciam erradas.
-# Se você tinha intenção de ter mais campos aqui, eles precisam ser adicionados dentro da classe acima.
+        unique_together = ('campo', 'valor')
 
 class EstruturaPasta(models.Model):
     nome_pasta = models.CharField(max_length=100, verbose_name="Nome da Subpasta")
@@ -71,9 +61,6 @@ class EstruturaPasta(models.Model):
         verbose_name_plural = "Estruturas de Pasta"
 
 class Produto(models.Model):
-    """
-    O PRODUTO ESCOLHE QUAIS CAMPOS ELE USA.
-    """
     nome = models.CharField(max_length=100, unique=True, verbose_name="Produto / Objeto do Serviço")
     estrutura_pastas = models.ManyToManyField(EstruturaPasta, blank=True, verbose_name="Estrutura de Pastas no SharePoint")
     
@@ -84,7 +71,6 @@ class RegraCampo(models.Model):
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
     produto = models.ForeignKey(Produto, on_delete=models.CASCADE)
     campos = models.ManyToManyField(Campo, verbose_name="Campos Customizados para esta Regra")
-
     formato_titulo = models.TextField(
         verbose_name="Formato do Título do Caso",
         blank=True,
@@ -92,7 +78,6 @@ class RegraCampo(models.Model):
     )
 
     def __str__(self):
-        # Tornando este também mais seguro
         cliente_nome = self.cliente.nome_razao_social if self.cliente else "Cliente não definido"
         produto_nome = self.produto.nome if self.produto else "Produto não definido"
         return f"Regra de Campos para: {cliente_nome} + {produto_nome}"
@@ -112,9 +97,9 @@ class Caso(models.Model):
     data_entrada_fase = models.DateTimeField(null=True, blank=True, verbose_name="Data de Entrada na Fase Atual")
     data_encerramento = models.DateField(verbose_name="Data de Encerramento", null=True, blank=True)
     titulo_caso = models.CharField(max_length=512, verbose_name="Título do Caso", blank=True)
-
     sharepoint_folder_id = models.CharField(max_length=255, blank=True, null=True, verbose_name="ID da Pasta no SharePoint")
     sharepoint_folder_url = models.URLField(max_length=500, blank=True, null=True, verbose_name="URL da Pasta no SharePoint")
+    
     class Meta:
         ordering = ['-id']
 
@@ -130,24 +115,18 @@ class Caso(models.Model):
 
     @property
     def total_horas_trabalhadas(self):
-        # Agora somamos o campo 'minutos_gastos'
         total_minutos = self.timesheets.aggregate(total=Sum('minutos_gastos'))['total'] or 0
-        
         if total_minutos > 0:
             horas = total_minutos // 60
             minutos = total_minutos % 60
             return f"{horas:02d}:{minutos:02d}"
         return "00:00"
+
 class AndamentoCaso(models.Model):
     caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='andamentos_caso')
     data_andamento = models.DateField(default=timezone.now, verbose_name="Data do Andamento")
     descricao = models.TextField(verbose_name="Descrição")
-    usuario_criacao = models.ForeignKey(
-        settings.AUTH_USER_MODEL, 
-        on_delete=models.SET_NULL, 
-        null=True, blank=True, 
-        verbose_name="Usuário"
-    )
+    usuario_criacao = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Usuário")
 
     def __str__(self):
         return f"Andamento em {self.data_andamento.strftime('%d/%m/%Y')} para o Caso #{self.caso.id}"
@@ -157,11 +136,7 @@ class AndamentoCaso(models.Model):
         verbose_name = "Andamento do Caso"
         verbose_name_plural = "Andamentos do Caso"
 
-
 class ValorCampoCaso(models.Model):
-    """
-    Armazena o VALOR de um Campo dinâmico para um Caso específico.
-    """
     caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='valores_dinamicos')
     campo = models.ForeignKey(Campo, on_delete=models.CASCADE)
     valor = models.TextField(blank=True, null=True)
@@ -173,25 +148,22 @@ class ValorCampoCaso(models.Model):
         ordering = ['campo__nome_label']
 
     def __str__(self):
-        return f"{self.campo.nome_label}: {self.valor or ''}"
+        if self.campo:
+            return f"{self.campo.nome_label}: {self.valor or ''}"
+        return f"Valor de campo inválido para o Caso #{self.caso_id}"
 
 # ==============================================================================
-# SEÇÃO 2: MODELOS DE APOIO E WORKFLOW (TODOS OS SEUS OUTROS MODELOS)
-# Estes modelos são mantidos como estavam, pois são essenciais para o sistema.
+# SEÇÃO 2: MODELOS DE APOIO E WORKFLOW
 # ==============================================================================
 
 class Advogado(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name="Usuário do Sistema")
     
-    # ===== AQUI ESTÁ A CORREÇÃO PRINCIPAL =====
     def __str__(self):
         try:
-            # Tenta acessar o usuário e retornar o nome
             return self.user.get_full_name() or self.user.username
         except User.DoesNotExist:
-            # Se o usuário não existe mais, retorna um texto seguro
             return f"Advogado (ID: {self.id}) - Usuário removido"
-    # ==========================================
 
 class Status(models.Model):
     nome = models.CharField(max_length=50, unique=True)
@@ -200,8 +172,8 @@ class Status(models.Model):
         verbose_name_plural = "Status"
 
 class FluxoInterno(models.Model):
-    caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='fluxo_interno') # related_name mudou
-    data_fluxo = models.DateField(verbose_name="Data") # Renomeado de data_andamento
+    caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='fluxo_interno')
+    data_fluxo = models.DateField(verbose_name="Data")
     descricao = models.TextField(verbose_name="Descrição")
     usuario_criacao = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Usuário")
     data_cadastro = models.DateTimeField(auto_now_add=True)
@@ -214,23 +186,16 @@ class FluxoInterno(models.Model):
         verbose_name = "Fluxo Interno"
         verbose_name_plural = "Fluxo Interno"
 
-
-
-
 class Timesheet(models.Model):
     caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='timesheets')
     data_execucao = models.DateField(verbose_name="Data de Execução")
     profissional = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, verbose_name="Profissional")
-    
-    # --- A GRANDE MUDANÇA ESTÁ AQUI ---
     minutos_gastos = models.PositiveIntegerField(default=0, verbose_name="Tempo Gasto (em minutos)")
-    
     descricao = models.TextField(verbose_name="Descrição da Atividade")
     data_cadastro = models.DateTimeField(auto_now_add=True)
 
     @property
     def tempo_formatado(self):
-        """Retorna o tempo no formato HH:MM para exibição."""
         if not self.minutos_gastos:
             return "00:00"
         horas = self.minutos_gastos // 60
@@ -238,14 +203,12 @@ class Timesheet(models.Model):
         return f"{horas:02d}:{minutos:02d}"
 
     def __str__(self):
-        # Também tornei este mais seguro, como boa prática
         if self.profissional:
             return f"Lançamento de {self.profissional.username} em {self.data_execucao.strftime('%d/%m/%Y')}"
         return f"Lançamento (sem profissional) em {self.data_execucao.strftime('%d/%m/%Y')}"
 
     class Meta:
         ordering = ['-data_execucao']
-
 
 class EmailTemplate(models.Model):
     nome = models.CharField(max_length=100, unique=True, help_text="Nome do modelo para identificação interna.")
@@ -258,7 +221,6 @@ class EmailTemplate(models.Model):
     class Meta:
         verbose_name = "Modelo de E-mail"
         verbose_name_plural = "Modelos de E-mail"
-
 
 class UserSignature(models.Model):
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="assinaturas")
@@ -275,7 +237,6 @@ class UserSignature(models.Model):
         verbose_name = "Assinatura de Usuário"
         verbose_name_plural = "Assinaturas de Usuários"
 
-
 class EmailCaso(models.Model):
     caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name="emails")
     microsoft_message_id = models.CharField(max_length=255, unique=True, help_text="ID único do e-mail na Microsoft Graph.")
@@ -286,8 +247,6 @@ class EmailCaso(models.Model):
     corpo_html = models.TextField(verbose_name="Corpo do E-mail")
     data_envio = models.DateTimeField(verbose_name="Data de Envio/Recebimento")
     is_sent = models.BooleanField(default=False, help_text="True se foi enviado do sistema, False se foi recebido.")
-    
-    # Para encadear conversas
     thread_id = models.CharField(max_length=255, blank=True, null=True, help_text="ID da thread de conversação.")
 
     def __str__(self):
@@ -307,8 +266,6 @@ class GraphWebhookSubscription(models.Model):
         if self.user:
             return f"Webhook for {self.user.username}"
         return f"Webhook (usuário deletado)"
-    
-
 
 class FluxoTrabalho(models.Model):
     nome = models.CharField(max_length=200, unique=True)
@@ -321,7 +278,7 @@ class FluxoTrabalho(models.Model):
 
     class Meta:
         verbose_name = "Fluxo de Trabalho"
-        verbose_name_plural = "1. Fluxos de Trabalho" # O '1.' ajuda a ordenar no Admin
+        verbose_name_plural = "1. Fluxos de Trabalho"
         unique_together = ('cliente', 'produto')
 
 class EtapaFluxo(models.Model):
@@ -331,7 +288,11 @@ class EtapaFluxo(models.Model):
     sla_dias = models.PositiveIntegerField(default=0, verbose_name="SLA (dias)", help_text="Prazo ideal em dias para esta etapa. 0 para sem SLA.")
 
     def __str__(self):
-        return f"{self.fluxo_trabalho.nome} - Etapa {self.ordem}: {self.nome}"
+        try:
+            fluxo_nome = self.fluxo_trabalho.nome
+            return f"{fluxo_nome} - Etapa {self.ordem}: {self.nome}"
+        except (AttributeError, FluxoTrabalho.DoesNotExist):
+            return f"Etapa {self.ordem}: {self.nome} (Fluxo de Trabalho inválido)"
 
     class Meta:
         ordering = ['fluxo_trabalho', 'ordem']
@@ -340,47 +301,19 @@ class EtapaFluxo(models.Model):
         verbose_name_plural = "2. Etapas dos Fluxos"
 
 class AcaoEtapa(models.Model):
-    PRAZO_CHOICES = [
-        ('corridos', 'Dias Corridos'),
-        ('uteis', 'Dias Úteis'),
-    ]
+    PRAZO_CHOICES = [('corridos', 'Dias Corridos'), ('uteis', 'Dias Úteis')]
     TIPO_RESPONSAVEL_CHOICES = [
         ('CRIADOR_ACAO', 'Usuário que Concluiu a Ação Anterior'),
         ('RESPONSAVEL_CASO', 'Responsável Pelo Caso'),
         ('USUARIO_FIXO', 'Usuário Fixo (especificar abaixo)'),
     ]
-
     etapa_fluxo = models.ForeignKey(EtapaFluxo, on_delete=models.CASCADE, related_name='acoes')
     titulo = models.CharField(max_length=200, verbose_name="Título da Ação/Tarefa")
     instrucoes = models.TextField(blank=True, verbose_name="Instruções Padrão")
-    
-    prazo_dias = models.PositiveIntegerField(
-        default=0, 
-        verbose_name="Prazo (em dias)",
-        help_text="Número de dias para concluir a tarefa após sua criação. 0 para sem prazo."
-    )
-    tipo_prazo = models.CharField(
-        max_length=10, 
-        choices=PRAZO_CHOICES, 
-        default='uteis', 
-        verbose_name="Tipo de Prazo"
-    )
-    
-    tipo_responsavel = models.CharField(
-        max_length=20,
-        choices=TIPO_RESPONSAVEL_CHOICES,
-        default='CRIADOR_ACAO',
-        verbose_name="Atribuir Responsável Para"
-    )
-    
-    responsavel_fixo = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name="Usuário Fixo",
-        help_text="Usado apenas se o tipo acima for 'Usuário Fixo'."
-    )
+    prazo_dias = models.PositiveIntegerField(default=0, verbose_name="Prazo (em dias)", help_text="Número de dias para concluir a tarefa após sua criação. 0 para sem prazo.")
+    tipo_prazo = models.CharField(max_length=10, choices=PRAZO_CHOICES, default='uteis', verbose_name="Tipo de Prazo")
+    tipo_responsavel = models.CharField(max_length=20, choices=TIPO_RESPONSAVEL_CHOICES, default='CRIADOR_ACAO', verbose_name="Atribuir Responsável Para")
+    responsavel_fixo = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Usuário Fixo", help_text="Usado apenas se o tipo acima for 'Usuário Fixo'.")
 
     def __str__(self):
         return self.titulo
@@ -392,20 +325,13 @@ class AcaoEtapa(models.Model):
 class OpcaoDecisao(models.Model):
     acao_etapa = models.ForeignKey(AcaoEtapa, on_delete=models.CASCADE, related_name='opcoes_decisao')
     label_do_botao = models.CharField(max_length=100, verbose_name="Texto do Botão de Decisão")
-    
-    # Ações de Workflow
     avancar_proxima_etapa = models.BooleanField(default=False, verbose_name="Avançar para Próxima Etapa?")
     mudar_etapa_para = models.ForeignKey(EtapaFluxo, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Mover para a Etapa Específica")
-    
-    # Ações de Tarefa
     criar_nova_acao = models.ForeignKey(AcaoEtapa, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Criar Nova Ação/Tarefa", related_name='+')
     aguardar_dias = models.PositiveIntegerField(default=0, verbose_name="Aguardar (dias)", help_text="Cria uma tarefa de lembrete para o futuro. 0 para desativado.")
-    
-    # Ações de Dados e Comunicação
     atualizar_status_caso = models.ForeignKey(Status, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Atualizar Status do Caso para")
     enviar_email = models.BooleanField(default=False, verbose_name="Enviar E-mail Automático?")
     modelo_email = models.ForeignKey('notificacoes.TemplateEmail', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Usar Modelo de E-mail")
-    # Adicionar campo para destinatários depois, se necessário
 
     def __str__(self):
         return f"Opção '{self.label_do_botao}' para a ação '{self.acao_etapa.titulo}'"
@@ -414,10 +340,8 @@ class OpcaoDecisao(models.Model):
         verbose_name = "Opção de Decisão"
         verbose_name_plural = "4. Opções de Decisão"
 
-
 class InstanciaAcao(models.Model):
     STATUS_CHOICES = [('P', 'Pendente'), ('C', 'Concluída')]
-
     caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name='acoes_em_andamento')
     acao_modelo = models.ForeignKey(AcaoEtapa, on_delete=models.PROTECT, verbose_name="Ação a ser executada")
     status = models.CharField(max_length=1, choices=STATUS_CHOICES, default='P')
