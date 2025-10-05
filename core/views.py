@@ -1,3 +1,5 @@
+# core/views.py (CORRIGIDO E FINAL)
+
 import calendar
 import json
 from collections import defaultdict
@@ -8,24 +10,26 @@ from django.views.generic import TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils import timezone
 
-# Importa os modelos novos e antigos que ainda são necessários
 from casos.models import Caso, InstanciaAcao, Status
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-# Funções auxiliares para os gráficos (agora com lógica real)
 def get_casos_por_status():
     dados_status = Status.objects.annotate(total_casos=Count('caso')).filter(total_casos__gt=0)
     labels = [s.nome for s in dados_status]
     data = [s.total_casos for s in dados_status]
     return {"labels": labels, "data": data}
 
+# ===== A CORREÇÃO ESTÁ AQUI =====
 def get_casos_por_advogado():
     """Retorna dados para o gráfico de barras de casos por advogado."""
     
-    # O caminho correto é: User -> advogado (relação OneToOne) -> casos_responsavel (related_name da FK em Caso)
-    dados_advogado = User.objects.annotate(
+    # Filtramos para pegar apenas usuários que TÊM um objeto Advogado relacionado.
+    # O '__isnull=False' garante que a consulta não quebre para usuários sem o relacionamento.
+    dados_advogado = User.objects.filter(
+        advogado__isnull=False
+    ).annotate(
         total_casos=Count('advogado__casos_responsavel')
     ).filter(total_casos__gt=0).order_by('-total_casos')
 
@@ -33,7 +37,7 @@ def get_casos_por_advogado():
     data = [a.total_casos for a in dados_advogado]
 
     return {"labels": labels, "data": data}
-
+# =================================
 
 class HomeView(LoginRequiredMixin, TemplateView):
     template_name = "core/home.html"
@@ -45,8 +49,6 @@ class HomeView(LoginRequiredMixin, TemplateView):
         ano_atual = hoje.year
         usuario_logado = self.request.user
 
-        # --- LÓGICA DE TAREFAS/AÇÕES ATUALIZADA ---
-        # Pega as ações pendentes do usuário cujo prazo final é exatamente hoje
         tarefas_para_hoje = InstanciaAcao.objects.filter(
             responsavel=usuario_logado,
             status='P',
@@ -55,7 +57,6 @@ class HomeView(LoginRequiredMixin, TemplateView):
         
         context['tarefas_para_hoje'] = tarefas_para_hoje
         
-        # --- LÓGICA DE DASHBOARD RESTAURADA ---
         if hoje.month <= 6:
             mes_inicial_semestre, mes_final_semestre = 1, 6
         else:
