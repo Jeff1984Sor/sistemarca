@@ -1,34 +1,33 @@
-# aureon_core/urls.py
+# aureon_core/urls.py (ATUALIZADO PARA DJANGO-ALLAUTH)
 
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-import nested_admin
 
-# Esta é a lista principal de URLs da sua aplicação
+# A importação do nested_admin não é mais necessária aqui,
+# pois a sua URL já está sendo incluída.
+
 urlpatterns = [
     # Rotas de ferramentas e administração
     path('admin/', admin.site.urls),
-    #path('oauth2/', include('django_auth_adfs.urls')),
+    
+    # --- ROTA PARA O DJANGO-ALLAUTH ---
+    # Adiciona todas as URLs necessárias para o novo sistema de login
+    # (ex: /accounts/login/, /accounts/logout/, /accounts/microsoft/login/, etc.)
+    path('accounts/', include('allauth.urls')),
+    
+    # --- SUAS URLS EXISTENTES ---
+    # Mantive a do nested_admin por precaução, embora o allauth não dependa dela.
     path('nested_admin/', include('nested_admin.urls')),
-
-    # Rotas dos seus apps
     path('contas/', include('contas.urls')),
     path('clientes/', include('clientes.urls')),
     path('casos/', include('casos.urls')),
     path('equipamentos/', include('equipamentos.urls')), 
-
-    # Adicione o include para 'notificacoes' se ele tiver URLs próprias
-    
-    # Rota principal (home page) do app 'core'
-    path('', include('core.urls')),
+    path('', include('core.urls')), # Rota principal (home page)
 ]
 
-if 'django_auth_adfs' in settings.INSTALLED_APPS:
-    urlpatterns.append(path('oauth2/', include('django_auth_adfs.urls')))
-    
-# A MÁGICA PARA SERVIR ARQUIVOS DE MÍDIA EM DESENVOLVIMENTO
-# Este bloco 'if' deve vir DEPOIS de 'urlpatterns'
+# Lógica para servir arquivos de mídia em desenvolvimento (mantida)
 if settings.DEBUG:
+    # A LINHA CORRETA E COMPLETA
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

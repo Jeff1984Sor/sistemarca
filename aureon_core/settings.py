@@ -1,4 +1,4 @@
-# aureon_core/settings.py (VERSÃO FINAL COMPLETA)
+# aureon_core/settings.py (ATUALIZADO PARA DJANGO-ALLAUTH)
 
 import os
 import dj_database_url
@@ -11,7 +11,6 @@ load_dotenv()
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-key-for-dev')
 
-# --- CONFIGURAÇÃO DE DEBUG ---
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
@@ -37,6 +36,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions', 
     'django.contrib.messages', 
     'django.contrib.staticfiles',
+    
+    # Apps do django-allauth (NECESSÁRIAS PARA O NOVO LOGIN)
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.microsoft', # Provedor da Microsoft
+
+    # Seus apps
     'core.apps.CoreConfig', 
     'contas.apps.ContasConfig', 
     'clientes.apps.ClientesConfig',
@@ -46,8 +54,14 @@ INSTALLED_APPS = [
     'configuracoes.apps.ConfiguracoesConfig',
 ]
 
+# NECESSÁRIO PARA O DJANGO-ALLAUTH
+SITE_ID = 1
+
 AUTHENTICATION_BACKENDS = [
+    # Needed to login by username in Django admin, regardless of `allauth`
     'django.contrib.auth.backends.ModelBackend',
+    # `allauth` specific authentication methods, such as login by e-mail
+    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
 TEMPLATES = [
@@ -58,10 +72,11 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.debug',
-                'django.template.context_processors.request',
+                'django.template.context_processors.request', # allauth precisa disso
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'configuracoes.context_processors.logo_processor',
+                'configuracoes.context_processors.modulos_visiveis', # Robô reativado
             ],
         },
     },
@@ -80,6 +95,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware', 
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Middleware do allauth (adicionado)
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 ROOT_URLCONF = 'aureon_core.urls'
@@ -102,93 +119,65 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # ==============================================================================
-# CONFIGURAÇÕES FINAIS ESTÁTICAS
+# CONFIGURAÇÕES DO DJANGO-ALLAUTH
+# ==============================================================================
+
+# Redireciona para a home após o login (seja local ou social)
+LOGIN_REDIRECT_URL = 'home'
+LOGOUT_REDIRECT_URL = 'home'
+# Página de login padrão agora será a do allauth, mas podemos customizar
+LOGIN_URL = 'account_login' 
+
+# Configurações específicas do provedor Microsoft
+SOCIALACCOUNT_PROVIDERS = {
+    'microsoft': {
+        'TENANT': os.environ.get('SHAREPOINT_TENANT_ID'),
+        'SCOPE': [
+            'User.Read', # Permissão básica para ler o perfil
+            'Sites.ReadWrite.All',
+            'Mail.ReadWrite',
+            'Mail.Send',
+            'offline_access',
+        ],
+    }
+}
+
+# Mapeia os campos da Microsoft para os campos do usuário Django
+SOCIALACCOUNT_ADAPTER = 'contas.adapter.MySocialAccountAdapter'
+ACCOUNT_EMAIL_VERIFICATION = "none" # Simplifica o fluxo por enquanto
+ACCOUNT_AUTHENTICATION_METHOD = "username_email" # Permite logar com user ou email
+ACCOUNT_EMAIL_REQUIRED = True
+
+# ==============================================================================
+# OUTRAS CONFIGURAÇÕES
 # ==============================================================================
 
 LANGUAGE_CODE = 'pt-br'
 TIME_ZONE = 'America/Sao_Paulo'
+# ... (o resto das suas configurações como STATIC_URL, MEDIA_URL, etc., podem continuar como estão)
+# Removi os blocos dinâmicos e de AUTH_ADFS que não são mais necessários
 USE_I18N = True
 USE_TZ = True
-
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
-
 STORAGES = {
     "default": { "BACKEND": "django.core.files.storage.FileSystemStorage" },
     "staticfiles": { "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage" },
 }
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-LOGIN_REDIRECT_URL = 'home'
-LOGOUT_REDIRECT_URL = 'home'
 X_FRAME_OPTIONS = "SAMEORIGIN"
 SILENCED_SYSTEM_CHECKS = ["security.W019"]
 INTERNAL_IPS = ["127.0.0.1"]
-
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-
 WEBHOOK_BASE_URL = os.environ.get('WEBHOOK_BASE_URL')
 STATICFILES_DIRS = [BASE_DIR / 'static']
 SHAREPOINT_SITE_URL = "rcostaadvcombr.sharepoint.com"
 SHAREPOINT_DRIVE_ID = os.environ.get('SHAREPOINT_DRIVE_ID')
 CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
-
-# ==============================================================================
-# LÓGICA DINÂMICA (EXECUTADA NO FINAL PARA MODIFICAR AS CONFIGURAÇÕES)
-# ==============================================================================
-
-try:
-    from configuracoes.models import ConfiguracaoGlobal
-    # Usamos .get() com pk=1 para criar o objeto se ele não existir
-    config, created = ConfiguracaoGlobal.objects.get_or_create(pk=1)
-except Exception:
-    class MockConfig: # Objeto falso usado durante o primeiro migrate
-        habilitar_login_microsoft = False
-        habilitar_robo_modulos = False
-    config = MockConfig()
-
-# --- Modifica APPs e Autenticação ---
-if config.habilitar_login_microsoft:
-    # Garante que não será adicionado duas vezes
-    if 'django_auth_adfs' not in INSTALLED_APPS:
-        INSTALLED_APPS.insert(2, 'django_auth_adfs') 
-    if 'contas.auth.CustomAdfsAuthCodeBackend' not in AUTHENTICATION_BACKENDS:
-        AUTHENTICATION_BACKENDS.insert(0, 'contas.auth.CustomAdfsAuthCodeBackend')
-
-# --- Modifica Context Processors ---
-if config.habilitar_robo_modulos:
-    if 'configuracoes.context_processors.modulos_visiveis' not in TEMPLATES[0]['OPTIONS']['context_processors']:
-        TEMPLATES[0]['OPTIONS']['context_processors'].append('configuracoes.context_processors.modulos_visiveis')
-
-# --- Define a URL de Login dinamicamente ---
-if config.habilitar_login_microsoft:
-    LOGIN_URL = 'django_auth_adfs:login'
-else:
-    LOGIN_URL = 'contas:login_local'
-
-# --- Define as configurações da Microsoft ---
-if config.habilitar_login_microsoft:
-    AUTH_ADFS = {
-       "CLIENT_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
-       "CLIENT_SECRET": os.environ.get('SHAREPOINT_CLIENT_SECRET'),
-       "TENANT_ID": os.environ.get('SHAREPOINT_TENANT_ID'),
-       "RELYING_PARTY_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
-       "AUDIENCE": os.environ.get('SHAREPOINT_CLIENT_ID'),
-       "CLAIM_MAPPING": {"first_name": "given_name", "last_name": "family_name", "email": "upn"},
-       "GROUPS_CLAIM": "groups", 
-       "MIRROR_GROUPS": True,
-       "SCOPES": [
-           "openid", "profile", "email", 
-           "https://graph.microsoft.com/Sites.ReadWrite.All",
-           "https://graph.microsoft.com/Mail.ReadWrite",
-           "https://graph.microsoft.com/Mail.Send",
-           "offline_access"
-       ],
-    }

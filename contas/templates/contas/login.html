@@ -1,4 +1,7 @@
-<!-- em contas/templates/contas/login.html (COMPLETO E FINAL) -->
+<!-- em contas/templates/contas/login.html (ATUALIZADO PARA DJANGO-ALLAUTH) -->
+{% extends 'core/base.html' %}
+{% load socialaccount %} <!-- MUITO IMPORTANTE: Carrega os helpers do allauth -->
+
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -171,13 +174,11 @@
             <button type="submit" class="btn btn-primary">Entrar</button>
         </form>
 
-        <!-- A CORREÇÃO ESTÁ NO 'IF' ABAIXO -->
-        {% if 'django_auth_adfs' in settings.INSTALLED_APPS and config and config.habilitar_login_microsoft %}
-            <div class="separator">ou</div>
-            <a href="{% url 'django_auth_adfs:login' %}" class="btn btn-microsoft">
-                Entrar com a Microsoft
-            </a>
-        {% endif %}
+        <!-- A LÓGICA DO BOTÃO DA MICROSOFT FOI ATUALIZADA -->
+        <div class="separator">ou</div>
+        <a href="{% provider_login_url 'microsoft' %}" class="btn btn-microsoft">
+            Entrar com a Microsoft
+        </a>
         
     </div>
 
