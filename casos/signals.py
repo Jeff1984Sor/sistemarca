@@ -1,70 +1,112 @@
-# casos/signals.py
+# casos/signals.py (COM A FUNÇÃO MUDAR_DE_FASE CORRIGIDA)
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
-# Importações dos modelos e serviços necessários
-from .models import Caso,Timesheet, AndamentoCaso
 
+# Importa TODOS os modelos necessários para TODAS as funções
+from .models import (
+    Caso, Timesheet, AndamentoCaso, AcordoCaso, ParcelaAcordo,
+    HistoricoEtapa, InstanciaAcao, EtapaFluxo
+)
+
+# A biblioteca python-dateutil é necessária. Lembre-se de adicioná-la ao requirements.txt
+try:
+    from dateutil.relativedelta import relativedelta
+except ImportError:
+    raise ImportError(
+        "A biblioteca 'python-dateutil' não foi encontrada. "
+        "Por favor, instale-a com 'pip install python-dateutil' e adicione ao requirements.txt."
+    )
 
 
 @receiver(post_save, sender=Timesheet)
 def registrar_timesheet_no_andamento(sender, instance, created, **kwargs):
-    """
-    Toda vez que um novo Timesheet é criado, este signal cria um registro
-    correspondente no Andamento do Caso.
-    """
     if created:
-        # Cria uma única entrada de andamento, usando a data de execução do timesheet
         AndamentoCaso.objects.create(
             caso=instance.caso,
             data_andamento=instance.data_execucao,
             usuario_criacao=instance.profissional,
             descricao=f"Lançamento de Timesheet realizado ({instance.tempo_formatado}):\n{instance.descricao}"
         )
+
+
+@receiver(post_save, sender=AcordoCaso, dispatch_uid="criar_ou_atualizar_parcelas_acordo_signal")
+def criar_ou_atualizar_parcelas(sender, instance, created, **kwargs):
+    if created:
+        instance.parcelas.all().delete()
+        parcelas_a_criar = []
+        for i in range(instance.quantidade_parcelas):
+            data_vencimento = instance.data_acordo + relativedelta(months=i)
+            parcelas_a_criar.append(
+                ParcelaAcordo(
+                    acordo=instance,
+                    numero_parcela=i + 1,
+                    data_vencimento=data_vencimento
+                )
+            )
+        if parcelas_a_criar:
+            ParcelaAcordo.objects.bulk_create(parcelas_a_criar)
+
+
 # ==============================================================================
-# FUNÇÃO AUXILIAR: LÓGICA CENTRAL PARA MUDAR DE FASE
+# FUNÇÃO CENTRAL DO WORKFLOW: MUDAR DE ETAPA (VERSÃO CORRIGIDA)
 # ==============================================================================
-def mudar_de_fase(caso, nova_fase):
+def mudar_de_etapa(caso: Caso, nova_etapa: EtapaFluxo, usuario_acao=None):
     """
-    Função central que executa todas as ações ao mudar de fase:
-    1. Atualiza o histórico da fase antiga.
-    2. Atualiza o status e a fase do caso.
-    3. Cria o novo registro de histórico.
-    4. Cria as novas tarefas padrão.
-    5. Dispara a notificação de avanço de fase.
-    """
-    fase_antiga = caso.fase_atual_workflow
+    Função central que executa todas as ações ao mudar de etapa do workflow.
     
-    # Atualiza o histórico da fase antiga (marca a data de saída)
-    if fase_antiga:
-        HistoricoFase.objects.filter(caso=caso, fase=fase_antiga, data_saida__isnull=True).update(data_saida=timezone.now())
+    :param caso: A instância do Caso que está mudando de etapa.
+    :param nova_etapa: A nova EtapaFluxo para a qual o caso será movido. Pode ser None se o fluxo terminou.
+    :param usuario_acao: O usuário que executou a ação que disparou a mudança (opcional).
+    """
+    etapa_antiga = caso.etapa_atual
+    
+    # 1. Atualiza o histórico da etapa antiga (marca a data de saída)
+    if etapa_antiga:
+        HistoricoEtapa.objects.filter(
+            caso=caso, 
+            etapa=etapa_antiga, 
+            data_saida__isnull=True
+        ).update(data_saida=timezone.now())
 
-    if nova_fase:
-        # Atualiza o caso com a nova fase
-        caso.fase_atual_workflow = nova_fase
-        if nova_fase.atualiza_status_para:
-            caso.status = nova_fase.atualiza_status_para
-        caso.save(update_fields=['fase_atual_workflow', 'status'])
+    # 2. Atualiza o caso com a nova etapa e data
+    caso.etapa_atual = nova_etapa
+    caso.data_entrada_fase = timezone.now() if nova_etapa else None
+    
+    # (Opcional) Se sua EtapaFluxo tivesse um campo para atualizar o status, a lógica entraria aqui.
+    # Ex: if nova_etapa and nova_etapa.atualiza_status_para:
+    #         caso.status = nova_etapa.atualiza_status_para
+    
+    caso.save(update_fields=['etapa_atual', 'data_entrada_fase'])
 
-        # Cria o novo registro de histórico para a nova fase
-        HistoricoFase.objects.create(caso=caso, fase=nova_fase)
+    if nova_etapa:
+        # 3. Cria o novo registro de histórico para a nova etapa
+        HistoricoEtapa.objects.create(caso=caso, etapa=nova_etapa)
 
-        # Cria as novas tarefas para a nova fase
-        for tarefa_padrao in nova_fase.tarefas_padrao.all():
-            Tarefa.objects.create(
+        # 4. Cria as novas instâncias de ação (tarefas) para a nova etapa
+        for acao_modelo in nova_etapa.acoes.all():
+            responsavel = None
+            if acao_modelo.tipo_responsavel == 'CRIADOR_ACAO' and usuario_acao:
+                responsavel = usuario_acao
+            elif acao_modelo.tipo_responsavel == 'RESPONSAVEL_CASO':
+                responsavel = caso.advogado_responsavel.user if caso.advogado_responsavel else None
+            elif acao_modelo.tipo_responsavel == 'USUARIO_FIXO':
+                responsavel = acao_modelo.responsavel_fixo
+            
+            InstanciaAcao.objects.create(
                 caso=caso,
-                tipo_tarefa=tarefa_padrao.tipo_tarefa,
-                responsavel=tarefa_padrao.responsavel_override,
-                origem_fase_workflow=nova_fase
+                acao_modelo=acao_modelo,
+                responsavel=responsavel
             )
         
-        # Dispara a notificação de avanço de fase
-        contexto = { 'caso': caso, 'fase_antiga': fase_antiga, 'nova_fase': nova_fase }
-        enviar_notificacao(slug_evento='avanco-fase-workflow', contexto=contexto)
-
+        # 5. (Pendente) Dispara a notificação de avanço de etapa
+        # Aqui entraria a chamada para a função enviar_notificacao, que precisa ser definida
+        # contexto = { 'caso': caso, 'etapa_antiga': etapa_antiga, 'nova_etapa': nova_etapa }
+        # enviar_notificacao(slug_evento='avanco-etapa-workflow', contexto=contexto)
+        print(f"Caso #{caso.id} movido para a etapa: {nova_etapa.nome}")
+        
     else:
         # O workflow terminou
-        caso.fase_atual_workflow = None
-        caso.save(update_fields=['fase_atual_workflow'])
-        # Opcional: Disparar um evento de "workflow concluído"
+        print(f"Workflow do Caso #{caso.id} foi concluído.")
+        # (Pendente) Disparar um evento de "workflow concluído"

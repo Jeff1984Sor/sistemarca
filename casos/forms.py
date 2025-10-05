@@ -4,7 +4,7 @@ from django.template import Template, Context
 from datetime import timedelta
 from .models import (
     Caso, Campo, ValorCampoCaso, FluxoInterno, Timesheet, 
-    OpcaoCampo, AndamentoCaso
+    OpcaoCampo, AndamentoCaso, DespesaCaso, AcordoCaso
 )
 
 class CasoCreateForm(forms.ModelForm):
@@ -111,3 +111,20 @@ class LancamentoHorasForm(forms.ModelForm):
         instance.minutos_gastos = (horas * 60) + minutos
         if commit: instance.save()
         return instance
+    
+class DespesaCasoForm(forms.ModelForm):
+    class Meta:
+        model = DespesaCaso
+        fields = ['data_despesa', 'descricao', 'valor']
+        widgets = {
+            'data_despesa': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+class AcordoCasoForm(forms.ModelForm):
+    class Meta:
+        model = AcordoCaso
+        fields = ['data_acordo', 'quantidade_parcelas', 'valor_parcela', 'descricao']
+        widgets = {
+            'data_acordo': forms.DateInput(attrs={'type': 'date'}),
+            'descricao': forms.Textarea(attrs={'rows': 3}),
+        }

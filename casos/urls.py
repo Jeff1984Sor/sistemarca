@@ -28,13 +28,17 @@ urlpatterns = [
     path('<int:caso_pk>/add_timesheet/', views.add_timesheet, name='add_timesheet'),
     path('timesheet/<int:pk>/editar/', views.LancamentoHorasUpdateView.as_view(), name='timesheet_update'),
     path('timesheet/<int:ts_pk>/delete/', views.delete_timesheet, name='delete_timesheet'),
-  
+    path('caso/<int:caso_pk>/despesas/nova/', views.DespesaCreateView.as_view(), name='despesa_create'),
+    path('despesas/<int:pk>/editar/', views.DespesaUpdateView.as_view(), name='despesa_update'),
   
     path('<int:caso_pk>/anexos/nova-pasta/', views.criar_pasta_anexo_view, name='criar_pasta_anexo'),
     path('<int:caso_pk>/anexos/upload/', views.upload_arquivo_anexo_view, name='upload_arquivo_anexo'),
     path('<int:caso_pk>/anexos/deletar/<str:item_id>/', views.deletar_item_view, name='deletar_item_anexo'),
     path('anexos/listar/<str:folder_id>/', views.listar_subpasta_ajax, name='listar_subpasta_ajax'),
     path('anexos/preview/<str:item_id>/', views.preview_arquivo_view, name='preview_arquivo'),
+    path('despesas/<int:pk>/deletar/', views.DespesaDeleteView.as_view(), name='despesa_delete'),
+    path('caso/<int:caso_pk>/despesas/exportar/excel/', views.exportar_despesas_excel, name='exportar_despesas_excel'),
+    path('caso/<int:caso_pk>/despesas/exportar/pdf/', views.exportar_despesas_pdf, name='exportar_despesas_pdf'),
 
     path('ajax/get-campos-produto/', views.get_campos_for_produto_ajax, name='get_campos_for_produto_ajax'),
     path('ajax/update-fase/', views.update_caso_fase_ajax, name='update_caso_fase_ajax'),
@@ -46,4 +50,14 @@ urlpatterns = [
     path('acao/<int:acao_pk>/executar/', views.executar_acao, name='executar_acao_simples'),
     path('acao/<int:acao_instancia_pk>/reabrir/', views.reabrir_acao, name='reabrir_acao'),
     path('acao/<int:acao_instancia_pk>/deletar/', views.deletar_acao, name='deletar_acao'),
+    path('caso/<int:caso_pk>/acordos/novo/', views.AcordoCreateView.as_view(), name='acordo_create'),
+    path('acordos/<int:pk>/editar/', views.AcordoUpdateView.as_view(), name='acordo_update'),
+    path('acordos/<int:pk>/deletar/', views.AcordoDeleteView.as_view(), name='acordo_delete'),
+    
+    # URL para a ação de quitar uma parcela
+    path('parcelas/<int:pk>/quitar/', views.quitar_parcela, name='quitar_parcela'),
+    path('caso/<int:caso_pk>/acordos/exportar/excel/', views.exportar_acordos_excel, name='exportar_acordos_excel'),
+    path('caso/<int:caso_pk>/acordos/exportar/pdf/', views.exportar_acordos_pdf, name='exportar_acordos_pdf'),
+
+
 ]

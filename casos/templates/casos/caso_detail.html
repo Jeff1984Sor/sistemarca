@@ -8,6 +8,8 @@
 
 <ul class="nav nav-tabs" id="casoDetailTab" role="tablist">
     <li class="nav-item" role="presentation"><button class="nav-link active" id="detalhes-tab" data-bs-toggle="tab" data-bs-target="#detalhes-tab-pane" type="button" role="tab">Detalhes</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" id="despesas-tab" data-bs-toggle="tab" data-bs-target="#despesas-tab-pane" type="button" role="tab">Despesas</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" id="acordos-tab" data-bs-toggle="tab" data-bs-target="#acordos-tab-pane" type="button" role="tab">Acordos</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" id="andamento-caso-tab" data-bs-toggle="tab" data-bs-target="#andamento-caso-tab-pane" type="button" role="tab">Andamento do Caso</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" id="workflow-tab" data-bs-toggle="tab" data-bs-target="#workflow-tab-pane" type="button" role="tab">Workflow</button></li>
     <li class="nav-item" role="presentation"><button class="nav-link" id="fluxo-interno-tab" data-bs-toggle="tab" data-bs-target="#fluxo-interno-tab-pane" type="button" role="tab">Fluxo Interno</button></li>
@@ -23,6 +25,83 @@
         <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="mb-0">Informações do Caso</h5><div><a href="{% url 'casos:caso_update' caso.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-pencil-square"></i> Editar Caso</a><a href="{% url 'casos:caso_list' %}" class="btn btn-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a></div></div><div class="card-body"><div class="row g-3"><h6 class="mt-3 border-bottom pb-2">Informações Principais</h6><div class="col-md-6"><p><strong>Etapa do Workflow:</strong> <span class="badge bg-info text-dark">{{ caso.etapa_atual.nome|default:"Não iniciado ou Concluído" }}</span></p></div><div class="col-md-6"><p><strong>Título:</strong> {{ caso.titulo_caso }}</p></div><div class="col-md-6"><p><strong>Cliente:</strong> {{ caso.cliente }}</p></div><div class="col-md-6"><p><strong>Produto / Objeto do Serviço:</strong> {{ caso.produto }}</p></div><div class="col-md-6"><p><strong>Status:</strong> {{ caso.status }}</p></div><div class="col-md-6"><p><strong>Data de Entrada:</strong> {{ caso.data_entrada_rca|date:"d/m/Y"|default:"-" }}</p></div><h6 class="mt-4 border-bottom pb-2">Informações Adicionais</h6>{% for valor_campo in caso.valores_dinamicos.all %}<div class="col-md-6"><p><strong>{{ valor_campo.campo.nome_label }}:</strong> {{ valor_campo.valor|linebreaksbr|default:"-" }}</p></div>{% empty %}<div class="col-12"><p class="text-muted">Nenhum campo customizado preenchido.</p></div>{% endfor %}</div></div></div>
     </div>
 
+    <div class="tab-pane fade" id="despesas-tab-pane" role="tabpanel">
+        <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="mb-0">Despesas do Caso</h5><div><a href="{% url 'casos:exportar_despesas_excel' caso.pk %}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Excel</a><a href="{% url 'casos:exportar_despesas_pdf' caso.pk %}" class="btn btn-danger btn-sm" target="_blank"><i class="bi bi-file-earmark-pdf"></i> PDF</a><a href="{% url 'casos:despesa_create' caso.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-circle"></i> Nova Despesa</a></div></div><div class="card-body p-0"><table class="table table-striped table-hover mb-0"><thead><tr><th>Data</th><th>Descrição</th><th class="text-end">Valor</th><th class="text-center">Ações</th></tr></thead><tbody>{% for despesa in despesas_do_caso %}<tr><td>{{ despesa.data_despesa|date:"d/m/Y" }}</td><td>{{ despesa.descricao }}</td><td class="text-end">R$ {{ despesa.valor|floatformat:2 }}</td><td class="text-center"><a href="{% url 'casos:despesa_update' despesa.pk %}" class="btn btn-warning btn-sm" title="Editar"><i class="bi bi-pencil"></i></a><a href="{% url 'casos:despesa_delete' despesa.pk %}" class="btn btn-danger btn-sm" title="Excluir"><i class="bi bi-trash"></i></a></td></tr>{% empty %}<tr><td colspan="4" class="text-center text-muted p-4">Nenhuma despesa registrada para este caso.</td></tr>{% endfor %}</tbody>{% if despesas_do_caso %}<tfoot class="table-group-divider"><tr><td colspan="2" class="text-end fw-bold">Total:</td><td class="text-end fw-bold">R$ {{ total_despesas|floatformat:2 }}</td><td></td></tr></tfoot>{% endif %}</table></div></div>
+    </div>
+
+    <div class="tab-pane fade" id="acordos-tab-pane" role="tabpanel">
+        <div class="card border-top-0 rounded-0 rounded-bottom">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Acordos do Caso</h5>
+                <div>
+                    <a href="{% url 'casos:exportar_acordos_excel' caso.pk %}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Exportar Tudo (Excel)</a>
+                    <a href="{% url 'casos:exportar_acordos_pdf' caso.pk %}" class="btn btn-danger btn-sm"><i class="bi bi-file-earmark-pdf"></i> Exportar Tudo (PDF)</a>
+                    <a href="{% url 'casos:acordo_create' caso.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-circle"></i> Novo Acordo</a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% for acordo in acordos_do_caso %}
+                <div class="card mb-3">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-0">Acordo de {{ acordo.data_acordo|date:"d/m/Y" }}</h6>
+                            <small class="text-muted">{{ acordo.quantidade_parcelas }} parcela(s) de R$ {{ acordo.valor_parcela|floatformat:2 }} | Total: R$ {{ acordo.valor_total|floatformat:2 }}</small>
+                        </div>
+                        <div>
+                            <a href="{% url 'casos:acordo_update' acordo.pk %}" class="btn btn-warning btn-sm" title="Editar"><i class="bi bi-pencil"></i></a>
+                            <a href="{% url 'casos:acordo_delete' acordo.pk %}" class="btn btn-danger btn-sm" title="Excluir"><i class="bi bi-trash"></i></a>
+                        </div>
+                    </div>
+                    <div class="p-2">
+                        {% if acordo.descricao %}
+                            <p class="fst-italic p-2 border-start border-4">"{{ acordo.descricao|linebreaksbr }}"</p>
+                        {% endif %}
+                        <table class="table table-sm table-hover small">
+                            <thead>
+                                <tr class="table-light">
+                                    <th class="ps-3">#</th>
+                                    <th>Vencimento</th>
+                                    <th class="text-end">Valor da Parcela</th>
+                                    <th>Situação</th>
+                                    <th>Data de Quitação</th>
+                                    <th class="text-center">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for parcela in acordo.parcelas.all %}
+                                <tr>
+                                    <td class="ps-3">{{ parcela.numero_parcela }}</td>
+                                    <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
+                                    <td class="text-end">R$ {{ acordo.valor_parcela|floatformat:2 }}</td>
+                                    <td>
+                                        {% if parcela.situacao == 'quitado' %}
+                                            <span class="badge bg-success">Quitada</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">Em Aberto</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ parcela.data_quitacao|date:"d/m/Y"|default:"-" }}</td>
+                                    <td class="text-center">
+                                        {% if parcela.situacao == 'aberto' %}
+                                        <form action="{% url 'casos:quitar_parcela' parcela.pk %}" method="post" class="d-inline">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-success btn-sm py-0">Quitar</button>
+                                        </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-center text-muted p-4">Nenhum acordo registrado para este caso.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
     <div class="tab-pane fade" id="andamento-caso-tab-pane" role="tabpanel">
         <div class="card border-top-0 rounded-0 rounded-bottom"><div class="card-header"><h5 class="mb-0">Adicionar Novo Andamento</h5></div><div class="card-body"><form action="{% url 'casos:add_andamento_caso' caso.pk %}" method="post">{% csrf_token %}{{ andamento_caso_form.as_p }}<button type="submit" class="btn btn-primary">Adicionar Andamento</button></form></div></div><div class="card mt-3"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="mb-0">Histórico de Andamentos</h5><div><a href="{% url 'casos:exportar_andamentos_excel' caso.pk %}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Excel</a><a href="{% url 'casos:exportar_andamentos_pdf' caso.pk %}" class="btn btn-danger btn-sm"><i class="bi bi-file-earmark-pdf"></i> PDF</a></div></div><div class="list-group list-group-flush">{% for andamento in caso.andamentos_caso.all %}<div class="list-group-item"><p class="mb-1">{{ andamento.descricao|linebreaksbr }}</p><small class="text-muted">Por {{ andamento.usuario_criacao.get_full_name|default:"Sistema" }} em {{ andamento.data_andamento|date:"d/m/Y" }}</small></div>{% empty %}<div class="list-group-item text-center text-muted">Nenhum andamento registrado.</div>{% endfor %}</div></div>
     </div>
@@ -61,6 +140,39 @@
 
 {% block scripts %}
 {{ block.super }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // ... (seu código JS existente) ...
+
+    // ==============================================================
+    // NOVA LÓGICA PARA A MÁSCARA DE TEMPO
+    // ==============================================================
+    const tempoGastoInput = document.getElementById('id_tempo_str'); // Usa o ID do campo do formulário
+
+    if (tempoGastoInput) {
+        const timeMask = IMask(tempoGastoInput, {
+            mask: 'HH:MM',
+            blocks: {
+                HH: {
+                    mask: IMask.MaskedRange,
+                    from: 0,
+                    to: 99, // Permite mais de 23 horas
+                    maxLength: 2
+                },
+                MM: {
+                    mask: IMask.MaskedRange,
+                    from: 0,
+                    to: 59,
+                    maxLength: 2
+                }
+            },
+            // Define o placeholder quando o campo está vazio
+            placeholderChar: '_'
+        });
+    }
+    // ==============================================================
+});
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const hash = window.location.hash;

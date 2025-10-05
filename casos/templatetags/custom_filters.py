@@ -1,6 +1,7 @@
 # casos/templatetags/custom_filters.py
 
 from django import template
+from decimal import Decimal
 
 register = template.Library()
 
@@ -40,3 +41,14 @@ def splitlines(value):
 @register.filter(name='get_item')
 def get_item(dictionary, key):
     return dictionary.get(key)
+
+@register.filter(name='to_dot_decimal')
+def to_dot_decimal(value):
+    """
+    Converte um valor decimal ou float para uma string com ponto como separador,
+    adequado para o 'value' de um input type="number".
+    """
+    if value is None:
+        return ''
+    # Converte para string e substitui a vírgula por ponto
+    return str(value).replace(',', '.')

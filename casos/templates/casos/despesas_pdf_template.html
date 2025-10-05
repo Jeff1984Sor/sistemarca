@@ -1,0 +1,24 @@
+<!-- Template de PDF Mínimo para Teste -->
+<!DOCTYPE html>
+<html>
+<head><title>Relatório de Despesas</title></head>
+<body>
+    <h1>Relatório para o Caso: {{ caso.titulo_caso }}</h1>
+    <p>Cliente: {{ caso.cliente.nome_razao_social }}</p>
+    
+    <hr>
+    
+    <h3>Despesas:</h3>
+    <ul>
+    {% for despesa in despesas %}
+        <li>{{ despesa.data_despesa|date:"d/m/Y" }} - {{ despesa.descricao }} - R$ {{ despesa.valor }}</li>
+    {% empty %}
+        <li>Nenhuma despesa encontrada.</li>
+    {% endfor %}
+    </ul>
+    
+    <hr>
+    
+    <h3>Total: R$ {{ total_despesas }}</h3>
+</body>
+</html>

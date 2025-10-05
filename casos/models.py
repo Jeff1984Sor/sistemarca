@@ -378,3 +378,60 @@ class HistoricoEtapa(models.Model):
         ordering = ['-data_entrada']
         verbose_name = "Histórico de Etapa"
         verbose_name_plural = "Históricos de Etapas"
+
+class DespesaCaso(models.Model):
+    caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name="despesas")
+    data_despesa = models.DateField(verbose_name="Data da Despesa")
+    descricao = models.CharField(max_length=500, verbose_name="Descrição")
+    valor = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor")
+
+    def __str__(self):
+        return f"Despesa de {self.valor} para o Caso #{self.caso.id}"
+
+    class Meta:
+        ordering = ['-data_despesa']
+        verbose_name = "Despesa do Caso"
+        verbose_name_plural = "Despesas dos Casos"
+
+
+class AcordoCaso(models.Model):
+    caso = models.ForeignKey(Caso, on_delete=models.CASCADE, related_name="acordos")
+    data_acordo = models.DateField(verbose_name="Data do Acordo")
+    quantidade_parcelas = models.PositiveIntegerField(default=1, verbose_name="Quantidade de Parcelas")
+    valor_parcela = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor da Parcela")
+    descricao = models.TextField(blank=True, verbose_name="Descrição do Acordo")
+
+    @property
+    def valor_total(self):
+        return self.quantidade_parcelas * self.valor_parcela
+
+    def __str__(self):
+        return f"Acordo de {self.quantidade_parcelas}x de {self.valor_parcela} para o Caso #{self.caso.id}"
+
+    class Meta:
+        ordering = ['-data_acordo']
+        verbose_name = "Acordo do Caso"
+        verbose_name_plural = "Acordos dos Casos"
+
+
+class ParcelaAcordo(models.Model):
+    SITUACAO_CHOICES = (
+        ('aberto', 'Em Aberto'),
+        ('quitado', 'Quitada'),
+    )
+    acordo = models.ForeignKey(AcordoCaso, on_delete=models.CASCADE, related_name="parcelas")
+    numero_parcela = models.PositiveIntegerField(verbose_name="Nº da Parcela")
+    data_vencimento = models.DateField(verbose_name="Data de Vencimento")
+    situacao = models.CharField(max_length=10, choices=SITUACAO_CHOICES, default='aberto', verbose_name="Situação")
+    
+    # --- NOVO CAMPO ADICIONADO AQUI ---
+    data_quitacao = models.DateField(verbose_name="Data de Quitação", null=True, blank=True)
+    # ------------------------------------
+
+    def __str__(self):
+        return f"Parcela {self.numero_parcela}/{self.acordo.quantidade_parcelas} - Venc: {self.data_vencimento.strftime('%d/%m/%Y')}"
+
+    class Meta:
+        ordering = ['data_vencimento']
+        verbose_name = "Parcela do Acordo"
+        verbose_name_plural = "Parcelas dos Acordos"

@@ -1,0 +1,86 @@
+<!-- em casos/templates/casos/pdf/acordos_pdf_template.html -->
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Acordos - Caso #{{ caso.id }}</title>
+    <style>
+        @page { size: A4; margin: 1.5cm; }
+        body { font-family: 'Helvetica', sans-serif; font-size: 10pt; color: #333; }
+        .header { text-align: center; margin-bottom: 20px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
+        .header img { max-height: 70px; max-width: 250px; margin-bottom: 10px; }
+        .header h1 { margin: 0; font-size: 18pt; }
+        .header h2 { margin: 5px 0 0 0; font-size: 12pt; color: #666; font-weight: normal; }
+        .info-caso { margin-bottom: 20px; padding: 10px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 5px; }
+        .info-caso p { margin: 4px 0; }
+        .acordo-bloco { margin-bottom: 25px; page-break-inside: avoid; }
+        .acordo-header { background-color: #f2f2f2; padding: 8px; border: 1px solid #ddd; border-bottom: none; }
+        .acordo-header h3 { margin: 0; font-size: 12pt; }
+        .acordo-header small { color: #555; }
+        .acordo-descricao { font-style: italic; padding: 10px; border: 1px solid #ddd; border-top: none; border-bottom: none; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 9pt; }
+        th { background-color: #fafafa; }
+        .text-end { text-align: right; }
+        .text-center { text-align: center; }
+        .badge { display: inline-block; padding: .25em .6em; font-size: 75%; font-weight: 700; line-height: 1; text-align: center; white-space: nowrap; vertical-align: baseline; border-radius: .25rem; color: #fff; }
+        .bg-success { background-color: #198754; }
+        .bg-warning { background-color: #ffc107; color: #000 !important; }
+        .currency { white-space: nowrap; }
+        .footer { position: fixed; bottom: -1cm; left: 0; right: 0; text-align: center; font-size: 8pt; color: #888; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        {% if logo_path %}
+            <img src="file://{{ logo_path }}" alt="Logo">
+        {% endif %}
+        <h1>Relatório de Acordos</h1>
+        <h2>Caso: {{ caso.titulo_caso }} (#{{ caso.id }})</h2>
+    </div>
+    <div class="info-caso">
+        <p><strong>Cliente:</strong> {{ caso.cliente.nome_razao_social }}</p>
+        <p><strong>Produto:</strong> {{ caso.produto.nome }}</p>
+        <p><strong>Data de Emissão:</strong> {{ data_emissao|date:"d/m/Y H:i" }}</p>
+    </div>
+
+    {% for acordo in acordos %}
+    <div class="acordo-bloco">
+        <div class="acordo-header">
+            <h3>Acordo de {{ acordo.data_acordo|date:"d/m/Y" }}</h3>
+            <small>{{ acordo.quantidade_parcelas }} parcela(s) de R$ {{ acordo.valor_parcela|floatformat:2 }} | Total: R$ {{ acordo.valor_total|floatformat:2 }}</small>
+        </div>
+        {% if acordo.descricao %}
+        <div class="acordo-descricao">
+            <p>"{{ acordo.descricao|linebreaksbr }}"</p>
+        </div>
+        {% endif %}
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 5%;">#</th>
+                    <th style="width: 20%;">Vencimento</th>
+                    <th class="text-end" style="width: 20%;">Valor</th>
+                    <th style="width: 20%;">Situação</th>
+                    <th style="width: 25%;">Data de Quitação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for parcela in acordo.parcelas.all %}
+                <tr>
+                    <td class="text-center">{{ parcela.numero_parcela }}</td>
+                    <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
+                    <td class="text-end currency">R$ {{ acordo.valor_parcela|floatformat:2 }}</td>
+                    <td><span class="badge {% if parcela.situacao == 'quitado' %}bg-success{% else %}bg-warning{% endif %}">{{ parcela.get_situacao_display }}</span></td>
+                    <td>{{ parcela.data_quitacao|date:"d/m/Y"|default:"-" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% empty %}
+    <p>Nenhum acordo registrado para este caso.</p>
+    {% endfor %}
+    <div class="footer">Gerado por Sistema RCA em {{ data_emissao|date:"d/m/Y" }}</div>
+</body>
+</html>

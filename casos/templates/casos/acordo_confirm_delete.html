@@ -1,0 +1,24 @@
+<!-- em casos/templates/casos/acordo_confirm_delete.html -->
+{% extends 'core/base.html' %}
+
+{% block title %}Confirmar Exclusão{% endblock %}
+{% block page_title %}Confirmar Exclusão de Acordo{% endblock %}
+
+{% block content %}
+<div class="card text-center">
+    <div class="card-body">
+        <h5 class="card-title">Atenção!</h5>
+        <p class="card-text">
+            Você está prestes a excluir permanentemente o acordo e <strong>TODAS</strong> as suas parcelas.
+        </p>
+        <p class="fw-bold">
+            "{{ object }}"
+        </p>
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Sim, tenho certeza. Excluir.</button>
+            <a href="{% url 'casos:caso_detail' object.caso.pk %}#acordos-tab-pane" class="btn btn-secondary">Cancelar</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

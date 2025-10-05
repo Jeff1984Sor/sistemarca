@@ -15,7 +15,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Sum # Adicionei o Sum aqui
 from django.db.models.functions import TruncMonth
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -24,42 +24,52 @@ from django.urls import reverse_lazy, reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from . import microsoft_graph_service
-from django.views.generic import ListView, CreateView, DetailView, UpdateView, TemplateView
+from django.views.generic import ListView, CreateView, DetailView, UpdateView, TemplateView, DeleteView
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
+from django.template.loader import render_to_string
+from django.db.models import Sum
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill 
+from weasyprint import HTML
+from .models import Caso, DespesaCaso
+from configuracoes.models import LogoConfig
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404
+from .models import Caso
+from .models import AcordoCaso, ParcelaAcordo
+from .forms import AcordoCasoForm
 
 # Third-Party Imports
 import openpyxl
 from openpyxl.styles import Font, Alignment
 from weasyprint import HTML
-#from business_duration import business_duration
 
 # Local App Imports
 from configuracoes.models import LogoConfig
 from notificacoes.servicos import enviar_notificacao
 
 # --- Imports do App 'casos' ---
-
-# Serviços
 from .microsoft_graph_service import (
     criar_pasta_caso, criar_subpastas, listar_arquivos_e_pastas, 
     upload_arquivo, deletar_item, criar_nova_pasta, obter_url_preview,
     enviar_email as enviar_email_service
 )
 
-# Modelos
 from .models import (
     Advogado, AndamentoCaso, AcaoEtapa, Caso, Cliente, Campo, EmailCaso, 
     EmailTemplate, EstruturaPasta, EtapaFluxo, FluxoInterno as FluxoInternoModel, 
     FluxoTrabalho, HistoricoEtapa, InstanciaAcao, OpcaoDecisao, Produto, Status, 
-    Timesheet, UserSignature, ValorCampoCaso
+    Timesheet, UserSignature, ValorCampoCaso,
+    # Importando os novos modelos
+    DespesaCaso, AcordoCaso, ParcelaAcordo
 )
 
-# Formulários
 from .forms import (
     AndamentoCasoForm, CasoCreateForm, CasoUpdateForm, EnviarEmailForm, 
-    FluxoInternoForm, LancamentoHorasForm
+    FluxoInternoForm, LancamentoHorasForm, DespesaCasoForm
 )
 
-# Tarefas Celery
 from .tasks import buscar_detalhes_email_enviado, processar_email_webhook
 
 Usuario = get_user_model()
@@ -214,6 +224,19 @@ class CasoDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         caso = self.get_object()
         
+        # --- BUSCA OS DADOS PARA AS NOVAS ABAS ---
+        # Busca todas as despesas relacionadas a este caso, ordenadas pela data mais recente
+        context['despesas_do_caso'] = caso.despesas.all().order_by('-data_despesa')
+        
+        # Busca todos os acordos e, para cada um, já busca as parcelas relacionadas
+        # O prefetch_related é uma otimização para evitar múltiplas consultas ao banco
+        context['acordos_do_caso'] = caso.acordos.prefetch_related('parcelas').order_by('-data_acordo')
+
+        # Calcula o total de despesas (exemplo de como fazer um cálculo)
+        context['total_despesas'] = caso.despesas.aggregate(total=Sum('valor'))['total'] or 0.00
+        # -------------------------------------------
+
+        # --- Mantém toda a sua lógica existente ---
         context['arquivos_sharepoint'] = []
         if caso.sharepoint_folder_id:
             context['arquivos_sharepoint'] = microsoft_graph_service.listar_arquivos_e_pastas(caso.sharepoint_folder_id)
@@ -239,6 +262,7 @@ class CasoDetailView(LoginRequiredMixin, DetailView):
         context['historico_etapas'] = models.HistoricoEtapa.objects.filter(caso=caso).order_by('data_entrada')
         
         return context
+
 def get_acoes_filtradas(request):
     """Função auxiliar que busca e filtra as InstanciaAcao."""
     queryset = models.InstanciaAcao.objects.select_related(
@@ -960,3 +984,511 @@ class LancamentoHorasUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse_lazy('casos:caso_detail', kwargs={'pk': self.object.caso.pk}) + '#timesheet-tab-pane'
+    
+
+# ==============================================================
+# NOVAS VIEWS PARA GERENCIAR DESPESAS
+# ==============================================================
+
+class DespesaCreateView(LoginRequiredMixin, CreateView):
+    model = DespesaCaso
+    form_class = DespesaCasoForm
+    template_name = 'casos/despesa_form.html'
+
+    def form_valid(self, form):
+        # Pega o caso da URL e o associa à nova despesa antes de salvar
+        caso = get_object_or_404(Caso, pk=self.kwargs['caso_pk'])
+        form.instance.caso = caso
+        messages.success(self.request, "Despesa adicionada com sucesso!")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        # Durante a criação, o 'caso_pk' está na URL, não no objeto.
+        # Nós pegamos o pk da URL para garantir que o redirecionamento funcione.
+        
+        # --- A CORREÇÃO ESTÁ AQUI ---
+        # 1. Primeiro, pegamos a variável 'caso_pk' da URL
+        caso_pk_da_url = self.kwargs.get('caso_pk')
+        
+        # 2. Agora, usamos essa variável para construir a URL de retorno
+        return reverse_lazy('casos:caso_detail', kwargs={'pk': caso_pk_da_url}) + '#despesas-tab-pane'
+    
+class DespesaUpdateView(LoginRequiredMixin, UpdateView):
+    model = DespesaCaso
+    form_class = DespesaCasoForm
+    template_name = 'casos/despesa_form.html'
+
+    def form_valid(self, form):
+        messages.success(self.request, "Despesa atualizada com sucesso!")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse_lazy('casos:caso_detail', kwargs={'pk': self.object.caso.pk}) + '#despesas-tab-pane'
+
+class DespesaDeleteView(LoginRequiredMixin, DeleteView):
+    model = DespesaCaso
+    template_name = 'casos/despesa_confirm_delete.html'
+
+    def form_valid(self, form):
+        messages.success(self.request, "Despesa excluída com sucesso!")
+        return super().form_valid(form)
+    
+    def get_success_url(self):
+        return reverse_lazy('casos:caso_detail', kwargs={'pk': self.object.caso.pk}) + '#despesas-tab-pane'
+    
+@login_required
+def exportar_despesas_excel(request, caso_pk):
+    caso = get_object_or_404(Caso, pk=caso_pk)
+    despesas = caso.despesas.all().order_by('data_despesa')
+    total_despesas = despesas.aggregate(total=Sum('valor'))['total'] or 0.00
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="despesas_caso_{caso.id}.xlsx"'
+    
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = 'Despesas do Caso'
+
+    # Título do Relatório
+    sheet.merge_cells('A1:D1')
+    titulo_cell = sheet['A1']
+    titulo_cell.value = f"Relatório de Despesas - Caso: {caso.titulo_caso}"
+    titulo_cell.font = Font(bold=True, size=14)
+    titulo_cell.alignment = Alignment(horizontal='center')
+    sheet.row_dimensions[1].height = 20
+    sheet.append([]) # Linha em branco
+
+    # Cabeçalhos da Tabela
+    headers = ['Data da Despesa', 'Descrição', 'Valor (R$)', '']
+    sheet.append(headers)
+    for cell in sheet[3]:
+        cell.font = Font(bold=True)
+    sheet.column_dimensions['A'].width = 15
+    sheet.column_dimensions['B'].width = 60
+    sheet.column_dimensions['C'].width = 15
+
+    # Dados
+    for despesa in despesas:
+        sheet.append([
+            despesa.data_despesa,
+            despesa.descricao,
+            despesa.valor,
+        ])
+        sheet.cell(row=sheet.max_row, column=1).number_format = 'DD/MM/YYYY'
+        sheet.cell(row=sheet.max_row, column=3).number_format = '"R$" #,##0.00'
+
+    # Linha do Total
+    proxima_linha = sheet.max_row + 2
+    sheet.cell(row=proxima_linha, column=2, value="Total Geral:").font = Font(bold=True)
+    sheet.cell(row=proxima_linha, column=2, value="Total Geral:").alignment = Alignment(horizontal='right')
+    total_cell = sheet.cell(row=proxima_linha, column=3, value=total_despesas)
+    total_cell.font = Font(bold=True)
+    total_cell.number_format = '"R$" #,##0.00'
+
+    workbook.save(response)
+    return response
+
+
+@login_required
+def exportar_despesas_pdf(request, caso_pk):
+    # --- Importações locais ---
+    from django.http import HttpResponse
+    from django.db.models import Sum
+    from django.utils import timezone
+    from weasyprint import HTML
+    from .models import Caso
+    # ---------------------------
+
+    try:
+        # Busca os dados do banco
+        caso = get_object_or_404(Caso, pk=caso_pk)
+        despesas = caso.despesas.all().order_by('data_despesa')
+        total_despesas = despesas.aggregate(total=Sum('valor'))['total'] or 0.00
+        data_emissao = timezone.now()
+
+        # --- Construção manual do HTML ---
+        despesas_html_rows = ""
+        if despesas.exists():
+            for despesa in despesas:
+                # Formatando os valores para exibição
+                data_formatada = despesa.data_despesa.strftime('%d/%m/%Y')
+                valor_formatado = f"R$ {despesa.valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                
+                despesas_html_rows += f"""
+                    <tr>
+                        <td>{data_formatada}</td>
+                        <td>{despesa.descricao}</td>
+                        <td class="text-end">{valor_formatado}</td>
+                    </tr>
+                """
+        else:
+            despesas_html_rows = '<tr><td colspan="3" style="text-align: center;">Nenhuma despesa registrada.</td></tr>'
+
+        # Formata o total
+        total_formatado = f"R$ {total_despesas:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        # Template HTML principal
+        html_string = f"""
+        <!DOCTYPE html>
+        <html lang="pt-br">
+        <head>
+            <meta charset="UTF-8">
+            <title>Relatório de Despesas - Caso #{caso.id}</title>
+            <style>
+                @page {{ size: A4; margin: 1.5cm; }}
+                body {{ font-family: 'Helvetica', sans-serif; font-size: 10pt; color: #333; }}
+                .header {{ text-align: center; margin-bottom: 20px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }}
+                .header h1 {{ margin: 0; font-size: 18pt; }}
+                .header h2 {{ margin: 5px 0 0 0; font-size: 12pt; color: #666; }}
+                .info-caso {{ margin-bottom: 20px; }}
+                .info-caso p {{ margin: 2px 0; }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
+                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                th {{ background-color: #f2f2f2; font-size: 11pt; }}
+                .text-end {{ text-align: right; }}
+                .footer {{ position: fixed; bottom: -1cm; left: 0; right: 0; text-align: center; font-size: 8pt; color: #888; }}
+                .total-row {{ font-weight: bold; background-color: #f9f9f9; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Relatório de Despesas</h1>
+                <h2>Caso: {caso.titulo_caso or f'#{caso.id}'}</h2>
+            </div>
+            <div class="info-caso">
+                <p><strong>Cliente:</strong> {caso.cliente.nome_razao_social}</p>
+                <p><strong>Produto:</strong> {caso.produto.nome}</p>
+                <p><strong>Data de Emissão:</strong> {data_emissao.strftime('%d/%m/%Y %H:%M')}</p>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Descrição</th>
+                        <th class="text-end">Valor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {despesas_html_rows}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="2" class="text-end">TOTAL GERAL:</td>
+                        <td class="text-end">{total_formatado}</td>
+                    </tr>
+                </tfoot>
+            </table>
+            <div class="footer">
+                Gerado por Sistema RCA em {data_emissao.strftime('%d/%m/%Y')}
+            </div>
+        </body>
+        </html>
+        """
+        # ---------------------------------
+        
+        html = HTML(string=html_string)
+        pdf = html.write_pdf()
+        
+        response = HttpResponse(pdf, content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="despesas_caso_{caso.id}.pdf"'
+        
+        return response
+
+    except Exception as e:
+        # Em caso de qualquer erro inesperado, retorna uma resposta de erro simples
+        print(f"ERRO FATAL ao gerar PDF de despesas: {e}")
+        return HttpResponse(f"Ocorreu um erro ao gerar o PDF: {e}", status=500)
+    
+
+class AcordoCreateView(LoginRequiredMixin, CreateView):
+    model = AcordoCaso
+    form_class = AcordoCasoForm
+    template_name = 'casos/acordo_form.html'
+
+    def form_valid(self, form):
+        caso = get_object_or_404(Caso, pk=self.kwargs['caso_pk'])
+        form.instance.caso = caso
+        messages.success(self.request, "Acordo adicionado com sucesso! As parcelas foram geradas automaticamente.")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse_lazy('casos:caso_detail', kwargs={'pk': self.kwargs['caso_pk']}) + '#acordos-tab-pane'
+
+class AcordoUpdateView(LoginRequiredMixin, UpdateView):
+    model = AcordoCaso
+    form_class = AcordoCasoForm
+    template_name = 'casos/acordo_form.html'
+
+    def form_valid(self, form):
+        messages.success(self.request, "Acordo atualizado com sucesso!")
+        # ATENÇÃO: A edição de um acordo NÃO recria as parcelas. Isso evita perda de dados.
+        # Se precisar recriar, a lógica seria mais complexa (ex: apagar parcelas antigas e criar novas).
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse_lazy('casos:caso_detail', kwargs={'pk': self.object.caso.pk}) + '#acordos-tab-pane'
+
+class AcordoDeleteView(LoginRequiredMixin, DeleteView):
+    model = AcordoCaso
+    template_name = 'casos/acordo_confirm_delete.html'
+    
+    def form_valid(self, form):
+        messages.success(self.request, "Acordo e todas as suas parcelas foram excluídos com sucesso!")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse_lazy('casos:caso_detail', kwargs={'pk': self.object.caso.pk}) + '#acordos-tab-pane'
+
+
+@login_required
+def quitar_parcela(request, pk):
+    # Encontra a parcela específica ou retorna um erro 404
+    parcela = get_object_or_404(ParcelaAcordo, pk=pk)
+    caso = parcela.acordo.caso
+
+    # Ação só deve ocorrer se o método for POST (enviado pelo formulário do botão)
+    if request.method == 'POST':
+        # 1. Atualiza a parcela
+        parcela.situacao = 'quitado'
+        parcela.data_quitacao = timezone.now().date()
+        parcela.save()
+
+        # 2. Cria o registro no Fluxo Interno
+        FluxoInternoModel.objects.create(
+            caso=caso,
+            data_fluxo=timezone.now().date(),
+            descricao=(
+                f"[ACORDO] Parcela #{parcela.numero_parcela} "
+                f"(Venc: {parcela.data_vencimento.strftime('%d/%m/%Y')}) "
+                f"do acordo de {parcela.acordo.data_acordo.strftime('%d/%m/%Y')} foi quitada."
+            ),
+            usuario_criacao=request.user
+        )
+        
+        messages.success(request, f"Parcela #{parcela.numero_parcela} quitada com sucesso!")
+
+    # 3. Redireciona o usuário de volta para a página do caso, na aba de acordos
+    return redirect(reverse('casos:caso_detail', kwargs={'pk': caso.pk}) + '#acordos-tab-pane')
+
+
+@login_required
+def exportar_acordos_excel(request, caso_pk):
+    caso = get_object_or_404(Caso, pk=caso_pk)
+    # Usamos prefetch_related para otimizar a busca das parcelas
+    acordos = caso.acordos.prefetch_related('parcelas').order_by('data_acordo')
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="acordos_caso_{caso.id}.xlsx"'
+    
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = 'Acordos e Parcelas'
+
+    # Estilos para a planilha
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+    acordo_fill = PatternFill(start_color="DCE6F1", end_color="DCE6F1", fill_type="solid")
+    center_align = Alignment(horizontal='center')
+
+    # Título do Relatório (agora com 7 colunas)
+    sheet.merge_cells('A1:G1')
+    titulo_cell = sheet['A1']
+    titulo_cell.value = f"Relatório de Acordos - Caso: {caso.titulo_caso or f'#{caso.id}'}"
+    titulo_cell.font = Font(bold=True, size=16)
+    titulo_cell.alignment = center_align
+    sheet.row_dimensions[1].height = 25
+    sheet.append([]) # Linha em branco
+
+    # Cabeçalhos da Tabela (com a nova coluna de Valor)
+    headers = [
+        'Acordo', 
+        'Descrição', 
+        'Nº da Parcela', 
+        'Valor da Parcela (R$)', # <<< COLUNA ADICIONADA
+        'Vencimento', 
+        'Situação', 
+        'Data de Quitação'
+    ]
+    sheet.append(headers)
+    for cell in sheet[3]:
+        cell.font = header_font
+        cell.fill = header_fill
+
+    # Definindo a largura das colunas
+    sheet.column_dimensions['A'].width = 20
+    sheet.column_dimensions['B'].width = 40
+    sheet.column_dimensions['C'].width = 15
+    sheet.column_dimensions['D'].width = 20 # <<< LARGURA PARA A NOVA COLUNA
+    sheet.column_dimensions['E'].width = 15
+    sheet.column_dimensions['F'].width = 15
+    sheet.column_dimensions['G'].width = 18
+
+    # Preenchendo os dados
+    if not acordos:
+        sheet.append(["Nenhum acordo encontrado para este caso."])
+    else:
+        for acordo in acordos:
+            # Linha de cabeçalho para cada acordo
+            acordo_header = [f"Acordo de {acordo.data_acordo.strftime('%d/%m/%Y')}", acordo.descricao, "", "", "", "", ""]
+            sheet.append(acordo_header)
+            acordo_row = sheet.max_row
+            sheet.merge_cells(start_row=acordo_row, start_column=1, end_row=acordo_row, end_column=7) # <<< AJUSTADO PARA 7 COLUNAS
+            for cell in sheet[acordo_row]:
+                cell.font = Font(bold=True)
+                cell.fill = acordo_fill
+
+            # Parcelas do acordo (com o novo campo de valor)
+            for parcela in acordo.parcelas.all():
+                sheet.append([
+                    "", 
+                    "",
+                    parcela.numero_parcela,
+                    acordo.valor_parcela, # <<< VALOR DA PARCELA ADICIONADO AQUI
+                    parcela.data_vencimento,
+                    parcela.get_situacao_display(),
+                    parcela.data_quitacao if parcela.data_quitacao else "",
+                ])
+                # Formatando as células da linha que acabamos de adicionar
+                row_idx = sheet.max_row
+                sheet.cell(row=row_idx, column=4).number_format = '"R$" #,##0.00' # Formato de moeda
+                sheet.cell(row=row_idx, column=5).number_format = 'DD/MM/YYYY'   # Formato de data
+                sheet.cell(row=row_idx, column=7).number_format = 'DD/MM/YYYY'   # Formato de data
+
+    workbook.save(response)
+    return response
+
+
+@login_required
+def exportar_acordos_pdf(request, caso_pk):
+    # --- Importações locais ---
+    from django.http import HttpResponse
+    from django.utils import timezone
+    from weasyprint import HTML
+    from .models import Caso
+    # ---------------------------
+
+    try:
+        # Busca os dados do banco
+        caso = get_object_or_404(Caso, pk=caso_pk)
+        acordos = caso.acordos.prefetch_related('parcelas').order_by('data_acordo')
+        data_emissao = timezone.now()
+
+        # --- Construção do HTML com Estilo ---
+        
+        # Bloco de estilo CSS (o mesmo do seu template original)
+        css_style = """
+            @page { size: A4; margin: 1.5cm; }
+            body { font-family: 'Helvetica', sans-serif; font-size: 10pt; color: #333; }
+            .header { text-align: center; margin-bottom: 20px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
+            .header img { max-height: 70px; max-width: 250px; margin-bottom: 10px; }
+            .header h1 { margin: 0; font-size: 18pt; }
+            .header h2 { margin: 5px 0 0 0; font-size: 12pt; color: #666; font-weight: normal; }
+            .info-caso { margin-bottom: 20px; padding: 10px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 5px; }
+            .info-caso p { margin: 4px 0; }
+            .acordo-bloco { margin-bottom: 25px; page-break-inside: avoid; }
+            .acordo-header { background-color: #f2f2f2; padding: 8px; border: 1px solid #ddd; border-bottom: none; }
+            .acordo-header h3 { margin: 0; font-size: 12pt; }
+            .acordo-header small { color: #555; }
+            .acordo-descricao { font-style: italic; padding: 10px; border: 1px solid #ddd; border-top: none; border-bottom: none; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 9pt; }
+            th { background-color: #fafafa; }
+            .text-end { text-align: right; }
+            .text-center { text-align: center; }
+            .badge { display: inline-block; padding: .25em .6em; font-size: 75%; font-weight: 700; line-height: 1; text-align: center; white-space: nowrap; vertical-align: baseline; border-radius: .25rem; color: #fff; }
+            .bg-success { background-color: #198754; }
+            .bg-warning { background-color: #ffc107; color: #000 !important; }
+            .currency { white-space: nowrap; }
+            .footer { position: fixed; bottom: -1cm; left: 0; right: 0; text-align: center; font-size: 8pt; color: #888; }
+        """
+
+        # Corpo do HTML
+        body_html = f"""
+        <div class="header">
+            <h1>Relatório de Acordos</h1>
+            <h2>Caso: {caso.titulo_caso or f'#{caso.id}'}</h2>
+        </div>
+        <div class="info-caso">
+            <p><strong>Cliente:</strong> {caso.cliente.nome_razao_social}</p>
+            <p><strong>Produto:</strong> {caso.produto.nome}</p>
+            <p><strong>Data de Emissão:</strong> {data_emissao.strftime('%d/%m/%Y %H:%M')}</p>
+        </div>
+        """
+
+        # Loop para gerar cada bloco de acordo
+        if acordos.exists():
+            for acordo in acordos:
+                # Formatações
+                data_acordo_fmt = acordo.data_acordo.strftime('%d/%m/%Y')
+                valor_parcela_fmt = f"R$ {acordo.valor_parcela:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                valor_total_fmt = f"R$ {acordo.valor_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                
+                # Cabeçalho do acordo
+                body_html += f"""
+                <div class="acordo-bloco">
+                    <div class="acordo-header">
+                        <h3>Acordo de {data_acordo_fmt}</h3>
+                        <small>{acordo.quantidade_parcelas} parcela(s) de {valor_parcela_fmt} | Total: {valor_total_fmt}</small>
+                    </div>
+                """
+                if acordo.descricao:
+                    body_html += f'<div class="acordo-descricao"><p>"{acordo.descricao}"</p></div>'
+                
+                # Tabela de parcelas
+                body_html += """
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 5%;">#</th>
+                            <th style="width: 20%;">Vencimento</th>
+                            <th class="text-end" style="width: 20%;">Valor</th>
+                            <th style="width: 20%;">Situação</th>
+                            <th style="width: 25%;">Data de Quitação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                """
+                for parcela in acordo.parcelas.all():
+                    vencimento_fmt = parcela.data_vencimento.strftime('%d/%m/%Y')
+                    quitacao_fmt = parcela.data_quitacao.strftime('%d/%m/%Y') if parcela.data_quitacao else '-'
+                    badge_class = "bg-success" if parcela.situacao == 'quitado' else "bg-warning"
+                    
+                    body_html += f"""
+                    <tr>
+                        <td class="text-center">{parcela.numero_parcela}</td>
+                        <td>{vencimento_fmt}</td>
+                        <td class="text-end currency">{valor_parcela_fmt}</td>
+                        <td><span class="badge {badge_class}">{parcela.get_situacao_display()}</span></td>
+                        <td>{quitacao_fmt}</td>
+                    </tr>
+                    """
+                body_html += "</tbody></table></div>"
+        else:
+            body_html += "<p>Nenhum acordo registrado para este caso.</p>"
+
+        # Template HTML final
+        html_string = f"""
+        <!DOCTYPE html>
+        <html lang="pt-br">
+        <head>
+            <meta charset="UTF-8">
+            <title>Relatório de Acordos - Caso #{caso.id}</title>
+            <style>{css_style}</style>
+        </head>
+        <body>
+            {body_html}
+            <div class="footer">Gerado por Sistema RCA em {data_emissao.strftime('%d/%m/%Y')}</div>
+        </body>
+        </html>
+        """
+        
+        html = HTML(string=html_string)
+        pdf = html.write_pdf()
+        
+        response = HttpResponse(pdf, content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="acordos_caso_{caso.id}.pdf"'
+        
+        return response
+
+    except Exception as e:
+        return HttpResponse(f"Ocorreu um erro ao gerar o PDF: {e}", status=500)
