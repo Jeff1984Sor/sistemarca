@@ -1,4 +1,4 @@
-<!-- em contas/templates/contas/login.html (ATUALIZADO E BONITO) -->
+<!-- em contas/templates/contas/login.html (COMPLETO E FINAL) -->
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -61,7 +61,6 @@
             color: #495057;
         }
         
-        /* Oculta os labels padrão do Django, pois já temos os nossos */
         form label {
             display: none;
         }
@@ -159,11 +158,10 @@
             </div>
         {% endif %}
 
-        <!-- Formulário de Login Padrão (Usuário e Senha) -->
         <form method="post">
             {% csrf_token %}
             <div class="form-group">
-                <label for="id_username">Usuário do Sistema</label>
+                <label for="id_username">Usuário</label>
                 <input type="text" name="username" id="id_username" placeholder="Digite seu usuário" required>
             </div>
             <div class="form-group">
@@ -173,8 +171,8 @@
             <button type="submit" class="btn btn-primary">Entrar</button>
         </form>
 
-        <!-- Lógica para mostrar o botão da Microsoft apenas se habilitado -->
-        {% if config and config.habilitar_login_microsoft %}
+        <!-- A CORREÇÃO ESTÁ NO 'IF' ABAIXO -->
+        {% if 'django_auth_adfs' in settings.INSTALLED_APPS and config and config.habilitar_login_microsoft %}
             <div class="separator">ou</div>
             <a href="{% url 'django_auth_adfs:login' %}" class="btn btn-microsoft">
                 Entrar com a Microsoft
