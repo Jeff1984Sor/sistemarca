@@ -8,11 +8,23 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
 from django.shortcuts import render, redirect
 from django.contrib import messages
+from configuracoes.models import ConfiguracaoGlobal
 
 from .models import Perfil
 from .forms import CustomUserCreationForm, UserUpdateForm, PerfilUpdateForm
 
-
+class CustomLoginView(LoginView):
+    template_name = 'contas/login.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        try:
+            # Envia a configuração para o template
+            context['config'] = ConfiguracaoGlobal.objects.first()
+        except Exception:
+            context['config'] = None
+        return context
+    
 class SignUpView(generic.CreateView):
     form_class = CustomUserCreationForm
     success_url = reverse_lazy('login')

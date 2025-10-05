@@ -25,6 +25,9 @@ urlpatterns = [
     path('', include('core.urls')),
 ]
 
+if 'django_auth_adfs' in settings.INSTALLED_APPS:
+    urlpatterns.append(path('oauth2/', include('django_auth_adfs.urls')))
+
 # A MÁGICA PARA SERVIR ARQUIVOS DE MÍDIA EM DESENVOLVIMENTO
 # Este bloco 'if' deve vir DEPOIS de 'urlpatterns'
 if settings.DEBUG:

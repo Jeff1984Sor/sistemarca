@@ -1,4 +1,5 @@
-# configuracoes/models.py
+# configuracoes/models.py (ATUALIZADO E COMPLETO)
+
 from django.db import models
 from django.contrib.auth.models import Group
 from colorfield.fields import ColorField
@@ -7,10 +8,6 @@ class Modulo(models.Model):
     nome = models.CharField(max_length=100)
     slug = models.SlugField(max_length=50, unique=True)
     ativo = models.BooleanField(default=True)
-    
-    # --- A MÁGICA ESTÁ AQUI ---
-    # Um módulo pode ser acessado por vários grupos.
-    # Um grupo pode ter acesso a vários módulos.
     grupos_permitidos = models.ManyToManyField(
         Group,
         blank=True,
@@ -28,9 +25,7 @@ class LogoConfig(models.Model):
         return f"Logo ({'Ativo' if self.ativo else 'Inativo'})"
     
     def save(self, *args, **kwargs):
-        # Garante que apenas um logo possa ser 'ativo' por vez.
         if self.ativo:
-            # Coloca todos os outros logos como inativos
             LogoConfig.objects.filter(ativo=True).exclude(pk=self.pk).update(ativo=False)
         super().save(*args, **kwargs)
 
@@ -40,20 +35,15 @@ class LogoConfig(models.Model):
 
 class Tema(models.Model):
     nome = models.CharField(max_length=100, unique=True, default="Tema Padrão")
-    
-    # Cores
     cor_primaria = ColorField(default='#0D6EFD', verbose_name="Cor Primária (botões, links principais)")
     cor_sucesso = ColorField(default='#198754', verbose_name="Cor de Sucesso (verde)")
     cor_perigo = ColorField(default='#DC3545', verbose_name="Cor de Perigo (vermelho)")
     cor_barra_nav = ColorField(default='#212529', verbose_name="Cor da Barra de Navegação Superior")
-
-    # Fontes (usando Google Fonts)
     fonte_principal = models.CharField(
         max_length=200, 
         default='Roboto',
         help_text="Nome da fonte do Google Fonts. Ex: 'Roboto', 'Lato', 'Open Sans'"
     )
-    
     ativo = models.BooleanField(default=True, help_text="Apenas um tema pode estar ativo por vez.")
 
     def __str__(self):
@@ -76,18 +66,14 @@ class Grafico(models.Model):
         ('doughnut', 'Rosca (Doughnut)'),
         ('radar', 'Radar'),
     ]
-    
     nome = models.CharField(max_length=100, unique=True, verbose_name="Nome do Gráfico")
     tipo_grafico = models.CharField(max_length=20, choices=TIPO_GRAFICO_CHOICES, default='bar', verbose_name="Tipo de Gráfico")
-    
-    # Este é o "link" entre a configuração no admin e a função no código Python
     fonte_dados_slug = models.CharField(
         max_length=100,
         unique=True,
         verbose_name="Fonte de Dados (Slug)",
         help_text="Identificador da função que gera os dados. Ex: 'casos_por_status', 'tarefas_por_responsavel'"
     )
-        
     ativo_no_dashboard = models.BooleanField(default=True, verbose_name="Mostrar no Dashboard?")
     ordem = models.PositiveIntegerField(default=0, help_text="Ordem de exibição (menor aparece primeiro).")
     
@@ -98,3 +84,32 @@ class Grafico(models.Model):
         ordering = ['ordem']
         verbose_name = "Gráfico do Dashboard"
         verbose_name_plural = "Gráficos do Dashboard"
+
+# ==============================================================================
+# NOSSO NOVO PAINEL DE CONTROLE GLOBAL
+# ==============================================================================
+
+class ConfiguracaoGlobal(models.Model):
+    singleton_id = models.IntegerField(primary_key=True, default=1, editable=False)
+
+    habilitar_login_microsoft = models.BooleanField(
+        default=False, 
+        verbose_name="Habilitar login com a Microsoft",
+        help_text="Se ativado, a opção de login via Microsoft será exibida na tela de login."
+    )
+
+    habilitar_robo_modulos = models.BooleanField(
+        default=False,
+        verbose_name="Habilitar robô de módulos visíveis",
+        help_text="Se ativado, o menu lateral será construído dinamicamente com base nas permissões do usuário."
+    )
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super(ConfiguracaoGlobal, self).save(*args, **kwargs)
+
+    def __str__(self):
+        return "Configurações Globais do Sistema"
+
+    class Meta:
+        verbose_name_plural = "Configurações Globais"

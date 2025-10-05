@@ -1,3 +1,5 @@
+# aureon_core/settings.py (ARRUMADO E COMPLETO)
+
 import os
 import dj_database_url
 from pathlib import Path
@@ -9,27 +11,33 @@ load_dotenv()
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-key-for-dev')
 
-IS_PRODUCTION = 'RENDER' in os.environ
+# --- CONFIGURAÇÃO DE DEBUG ---
+# (Você pode descomentar a linha do Render quando tudo estiver 100% funcional)
+# IS_PRODUCTION = 'RENDER' in os.environ
+# if IS_PRODUCTION:
+#     DEBUG = False
+# else:
+#     DEBUG = True
+# Lógica temporária para depuração:
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
-if IS_PRODUCTION:
-    DEBUG = False
-else:
-    DEBUG = True
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
-# Adiciona a URL do Ngrok se estiver em desenvolvimento e a variável existir
 NGROK_HOSTNAME = os.environ.get('NGROK_HOSTNAME')
-if not IS_PRODUCTION and NGROK_HOSTNAME:
+if not RENDER_EXTERNAL_HOSTNAME and NGROK_HOSTNAME: # Garante que Ngrok só seja usado localmente
     ALLOWED_HOSTS.append(NGROK_HOSTNAME)
+
+# ==============================================================================
+# 1. DEFINIÇÕES BASE DAS APLICAÇÕES E TEMPLATES
+# ==============================================================================
 
 INSTALLED_APPS = [
     'admin_interface', 
     'colorfield', 
-   # 'django_auth_adfs',
     'nested_admin',
     'django.contrib.admin', 
     'django.contrib.auth', 
@@ -45,6 +53,31 @@ INSTALLED_APPS = [
     'equipamentos.apps.EquipamentosConfig', 
     'configuracoes.apps.ConfiguracoesConfig',
 ]
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / 'templates'],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+                'configuracoes.context_processors.logo_processor', # Mantemos este
+            ],
+        },
+    },
+]
+
+# ==============================================================================
+# CONFIGURAÇÕES PADRÃO (MIDDLEWARE, BANCO DE DADOS, ETC.)
+# ==============================================================================
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware', 
@@ -69,57 +102,65 @@ DATABASES = {
 if 'DATABASE_URL' in os.environ:
     DATABASES['default'] = dj_database_url.config(conn_max_age=600, ssl_require=True)
 
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-                #'configuracoes.context_processors.modulos_visiveis',
-                #'configuracoes.context_processors.logo_processor',
-            ],
-        },
-    },
-]
-
-AUTHENTICATION_BACKENDS = (
-    #'contas.auth.CustomAdfsAuthCodeBackend',
-    'django.contrib.auth.backends.ModelBackend',
-)
-
-AUTH_ADFS = {
-   # "CLIENT_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
-    #"CLIENT_SECRET": os.environ.get('SHAREPOINT_CLIENT_SECRET'),
-    #"TENANT_ID": os.environ.get('SHAREPOINT_TENANT_ID'),
-    #"RELYING_PARTY_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
-    #"AUDIENCE": os.environ.get('SHAREPOINT_CLIENT_ID'),
-    #"CLAIM_MAPPING": {
-    #    "first_name": "given_name",
-     #   "last_name": "family_name",
-      #  "email": "upn",
-    #},
-    #"GROUPS_CLAIM": "groups", 
-    #"MIRROR_GROUPS": True,
-    #"SCOPES": [
-    #    "openid", "profile", "email", 
-    #    "https://graph.microsoft.com/Sites.ReadWrite.All",
-    #    "https://graph.microsoft.com/Mail.ReadWrite",
-    #    "https://graph.microsoft.com/Mail.Send",
-    #    "offline_access"
-    #],
-}
-
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+
+# ==============================================================================
+# 2. LÓGICA DINÂMICA (EXECUTADA DEPOIS DAS DEFINIÇÕES BASE)
+# ==============================================================================
+
+try:
+    from configuracoes.models import ConfiguracaoGlobal
+    config = ConfiguracaoGlobal.objects.first()
+    if not config:
+        config = ConfiguracaoGlobal() 
+except Exception:
+    class MockConfig:
+        habilitar_login_microsoft = False
+        habilitar_robo_modulos = False
+    config = MockConfig()
+
+# --- Lógica para APPs e Autenticação ---
+if config.habilitar_login_microsoft:
+    INSTALLED_APPS.insert(2, 'django_auth_adfs') # Insere na posição correta
+    AUTHENTICATION_BACKENDS.insert(0, 'contas.auth.CustomAdfsAuthCodeBackend')
+
+# --- Lógica para Context Processors ---
+if config.habilitar_robo_modulos:
+    TEMPLATES[0]['OPTIONS']['context_processors'].append('configuracoes.context_processors.modulos_visiveis')
+
+# --- Lógica para Configurações da Microsoft ---
+if config.habilitar_login_microsoft:
+    AUTH_ADFS = {
+       "CLIENT_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
+       "CLIENT_SECRET": os.environ.get('SHAREPOINT_CLIENT_SECRET'),
+       "TENANT_ID": os.environ.get('SHAREPOINT_TENANT_ID'),
+       "RELYING_PARTY_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
+       "AUDIENCE": os.environ.get('SHAREPOINT_CLIENT_ID'),
+       "CLAIM_MAPPING": {
+           "first_name": "given_name",
+           "last_name": "family_name",
+           "email": "upn",
+       },
+       "GROUPS_CLAIM": "groups", 
+       "MIRROR_GROUPS": True,
+       "SCOPES": [
+           "openid", "profile", "email", 
+           "https://graph.microsoft.com/Sites.ReadWrite.All",
+           "https://graph.microsoft.com/Mail.ReadWrite",
+           "https://graph.microsoft.com/Mail.Send",
+           "offline_access"
+       ],
+    }
+
+# ==============================================================================
+# CONFIGURAÇÕES FINAIS
+# ==============================================================================
+
 LANGUAGE_CODE = 'pt-br'
 TIME_ZONE = 'America/Sao_Paulo'
 USE_I18N = True
@@ -151,10 +192,7 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 
 WEBHOOK_BASE_URL = os.environ.get('WEBHOOK_BASE_URL')
-
 STATICFILES_DIRS = [BASE_DIR / 'static']
-
 SHAREPOINT_SITE_URL = "rcostaadvcombr.sharepoint.com"
 SHAREPOINT_DRIVE_ID = os.environ.get('SHAREPOINT_DRIVE_ID')
-
 CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')

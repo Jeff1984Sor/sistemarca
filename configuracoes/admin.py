@@ -1,6 +1,6 @@
 # configuracoes/admin.py
 from django.contrib import admin
-from .models import LogoConfig, Modulo, Tema, Grafico
+from .models import LogoConfig, Modulo, Tema, Grafico, ConfiguracaoGlobal
 
 @admin.register(LogoConfig)
 class LogoConfigAdmin(admin.ModelAdmin):
@@ -48,3 +48,15 @@ class GraficoAdmin(admin.ModelAdmin):
                           "Exemplos: 'casos_por_status', 'casos_por_advogado', 'casos_por_origem'.")
         }),
     )
+
+@admin.register(ConfiguracaoGlobal)
+class ConfiguracaoGlobalAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'habilitar_login_microsoft', 'habilitar_robo_modulos')
+    
+    # Este método impede que alguém crie uma SEGUNDA linha de configurações
+    def has_add_permission(self, request):
+        return not ConfiguracaoGlobal.objects.exists()
+
+    # Este método impede que alguém delete a linha de configurações
+    def has_delete_permission(self, request, obj=None):
+        return False

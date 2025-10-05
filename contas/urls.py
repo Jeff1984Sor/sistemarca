@@ -1,20 +1,16 @@
-# contas/urls.py (ATUALIZADO)
+# contas/urls.py
 
 from django.urls import path, reverse_lazy
 from django.contrib.auth import views as auth_views
-from .views import SignUpView, PerfilView # Removemos a importação de CustomLoginView
+from .views import SignUpView, PerfilView # Remove CustomLoginView se não for mais usada
 
 app_name = 'contas'
 
 urlpatterns = [
-    # URLs de Autênticação
-
-    # Rota para o usuário criar uma nova conta (se aplicável)
+    # URLs de Autenticação
     path('signup/', SignUpView.as_view(), name='signup'),
     
-    # Rota de Login - ESTA É A MUDANÇA PRINCIPAL
-    # Estamos usando a LoginView padrão do Django e dizendo a ela para usar
-    # nosso novo template com as duas opções de login.
+    # Rota de Login (usando a LoginView padrão do Django)
     path(
         'login/', 
         auth_views.LoginView.as_view(
@@ -23,10 +19,10 @@ urlpatterns = [
         name='login'
     ),
     
-    # Rota de Logout - Já estava correta
+    # Rota de Logout
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
 
-    # URLs de Perfil e Senha - Já estavam corretas
+    # URLs de Perfil e Senha
     path('perfil/', PerfilView.as_view(), name='perfil'),
     
     path(
