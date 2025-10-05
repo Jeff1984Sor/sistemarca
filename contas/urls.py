@@ -1,8 +1,8 @@
-# contas/urls.py (ATUALIZADO)
+# contas/urls.py (VERSÃO FINAL E LIMPA)
 
 from django.urls import path, reverse_lazy
 from django.contrib.auth import views as auth_views
-from .views import SignUpView, PerfilView, CustomLoginView # Importamos a CustomLoginView
+from .views import SignUpView, PerfilView, CustomLoginView
 
 app_name = 'contas'
 
@@ -10,15 +10,12 @@ urlpatterns = [
     # URLs de Autenticação
     path('signup/', SignUpView.as_view(), name='signup'),
     
-    # Rota para o login local (usuário/senha)
-    # A URL agora é 'login-local/' e o nome é 'login_local'
     path(
         'login-local/', 
-        CustomLoginView.as_view(), # Usando a CustomLoginView para passar o 'config' para o template
+        CustomLoginView.as_view(), 
         name='login_local'
     ),
     
-    # Rota de Logout
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
 
     # URLs de Perfil e Senha
