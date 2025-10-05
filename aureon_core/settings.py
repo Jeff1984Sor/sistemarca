@@ -1,4 +1,4 @@
-# aureon_core/settings.py (ARRUMADO E COMPLETO)
+# aureon_core/settings.py (VERSÃO FINAL COMPLETA)
 
 import os
 import dj_database_url
@@ -12,15 +12,7 @@ load_dotenv()
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-key-for-dev')
 
 # --- CONFIGURAÇÃO DE DEBUG ---
-# (Você pode descomentar a linha do Render quando tudo estiver 100% funcional)
-# IS_PRODUCTION = 'RENDER' in os.environ
-# if IS_PRODUCTION:
-#     DEBUG = False
-# else:
-#     DEBUG = True
-# Lógica temporária para depuração:
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
-
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
@@ -28,7 +20,7 @@ if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 NGROK_HOSTNAME = os.environ.get('NGROK_HOSTNAME')
-if not RENDER_EXTERNAL_HOSTNAME and NGROK_HOSTNAME: # Garante que Ngrok só seja usado localmente
+if not RENDER_EXTERNAL_HOSTNAME and NGROK_HOSTNAME:
     ALLOWED_HOSTS.append(NGROK_HOSTNAME)
 
 # ==============================================================================
@@ -69,7 +61,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'configuracoes.context_processors.logo_processor', # Mantemos este
+                'configuracoes.context_processors.logo_processor',
             ],
         },
     },
@@ -110,55 +102,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # ==============================================================================
-# 2. LÓGICA DINÂMICA (EXECUTADA DEPOIS DAS DEFINIÇÕES BASE)
-# ==============================================================================
-
-try:
-    from configuracoes.models import ConfiguracaoGlobal
-    config = ConfiguracaoGlobal.objects.first()
-    if not config:
-        config = ConfiguracaoGlobal() 
-except Exception:
-    class MockConfig:
-        habilitar_login_microsoft = False
-        habilitar_robo_modulos = False
-    config = MockConfig()
-
-# --- Lógica para APPs e Autenticação ---
-if config.habilitar_login_microsoft:
-    INSTALLED_APPS.insert(2, 'django_auth_adfs') # Insere na posição correta
-    AUTHENTICATION_BACKENDS.insert(0, 'contas.auth.CustomAdfsAuthCodeBackend')
-
-# --- Lógica para Context Processors ---
-if config.habilitar_robo_modulos:
-    TEMPLATES[0]['OPTIONS']['context_processors'].append('configuracoes.context_processors.modulos_visiveis')
-
-# --- Lógica para Configurações da Microsoft ---
-if config.habilitar_login_microsoft:
-    AUTH_ADFS = {
-       "CLIENT_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
-       "CLIENT_SECRET": os.environ.get('SHAREPOINT_CLIENT_SECRET'),
-       "TENANT_ID": os.environ.get('SHAREPOINT_TENANT_ID'),
-       "RELYING_PARTY_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
-       "AUDIENCE": os.environ.get('SHAREPOINT_CLIENT_ID'),
-       "CLAIM_MAPPING": {
-           "first_name": "given_name",
-           "last_name": "family_name",
-           "email": "upn",
-       },
-       "GROUPS_CLAIM": "groups", 
-       "MIRROR_GROUPS": True,
-       "SCOPES": [
-           "openid", "profile", "email", 
-           "https://graph.microsoft.com/Sites.ReadWrite.All",
-           "https://graph.microsoft.com/Mail.ReadWrite",
-           "https://graph.microsoft.com/Mail.Send",
-           "offline_access"
-       ],
-    }
-
-# ==============================================================================
-# CONFIGURAÇÕES FINAIS
+# CONFIGURAÇÕES FINAIS ESTÁTICAS
 # ==============================================================================
 
 LANGUAGE_CODE = 'pt-br'
@@ -179,7 +123,6 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_REDIRECT_URL = 'home'
 LOGOUT_REDIRECT_URL = 'home'
-LOGIN_URL = 'django_auth_adfs:login'
 X_FRAME_OPTIONS = "SAMEORIGIN"
 SILENCED_SYSTEM_CHECKS = ["security.W019"]
 INTERNAL_IPS = ["127.0.0.1"]
@@ -196,3 +139,56 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 SHAREPOINT_SITE_URL = "rcostaadvcombr.sharepoint.com"
 SHAREPOINT_DRIVE_ID = os.environ.get('SHAREPOINT_DRIVE_ID')
 CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+
+# ==============================================================================
+# LÓGICA DINÂMICA (EXECUTADA NO FINAL PARA MODIFICAR AS CONFIGURAÇÕES)
+# ==============================================================================
+
+try:
+    from configuracoes.models import ConfiguracaoGlobal
+    # Usamos .get() com pk=1 para criar o objeto se ele não existir
+    config, created = ConfiguracaoGlobal.objects.get_or_create(pk=1)
+except Exception:
+    class MockConfig: # Objeto falso usado durante o primeiro migrate
+        habilitar_login_microsoft = False
+        habilitar_robo_modulos = False
+    config = MockConfig()
+
+# --- Modifica APPs e Autenticação ---
+if config.habilitar_login_microsoft:
+    # Garante que não será adicionado duas vezes
+    if 'django_auth_adfs' not in INSTALLED_APPS:
+        INSTALLED_APPS.insert(2, 'django_auth_adfs') 
+    if 'contas.auth.CustomAdfsAuthCodeBackend' not in AUTHENTICATION_BACKENDS:
+        AUTHENTICATION_BACKENDS.insert(0, 'contas.auth.CustomAdfsAuthCodeBackend')
+
+# --- Modifica Context Processors ---
+if config.habilitar_robo_modulos:
+    if 'configuracoes.context_processors.modulos_visiveis' not in TEMPLATES[0]['OPTIONS']['context_processors']:
+        TEMPLATES[0]['OPTIONS']['context_processors'].append('configuracoes.context_processors.modulos_visiveis')
+
+# --- Define a URL de Login dinamicamente ---
+if config.habilitar_login_microsoft:
+    LOGIN_URL = 'django_auth_adfs:login'
+else:
+    LOGIN_URL = 'contas:login_local'
+
+# --- Define as configurações da Microsoft ---
+if config.habilitar_login_microsoft:
+    AUTH_ADFS = {
+       "CLIENT_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
+       "CLIENT_SECRET": os.environ.get('SHAREPOINT_CLIENT_SECRET'),
+       "TENANT_ID": os.environ.get('SHAREPOINT_TENANT_ID'),
+       "RELYING_PARTY_ID": os.environ.get('SHAREPOINT_CLIENT_ID'),
+       "AUDIENCE": os.environ.get('SHAREPOINT_CLIENT_ID'),
+       "CLAIM_MAPPING": {"first_name": "given_name", "last_name": "family_name", "email": "upn"},
+       "GROUPS_CLAIM": "groups", 
+       "MIRROR_GROUPS": True,
+       "SCOPES": [
+           "openid", "profile", "email", 
+           "https://graph.microsoft.com/Sites.ReadWrite.All",
+           "https://graph.microsoft.com/Mail.ReadWrite",
+           "https://graph.microsoft.com/Mail.Send",
+           "offline_access"
+       ],
+    }
