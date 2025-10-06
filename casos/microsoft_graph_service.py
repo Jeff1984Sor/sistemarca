@@ -2,7 +2,9 @@
 
 import requests
 import json
+import msal
 from django.conf import settings
+from django.contrib.auth import get_user_model
 
 def get_access_token():
     """Obtém um token de acesso de aplicativo do Azure AD."""
@@ -305,3 +307,71 @@ def enviar_email(remetente_email, para, assunto, corpo, salvar_em_enviados=True)
     except Exception as e:
         print(f"ERRO INESPERADO ao enviar e-mail: {repr(e)}")
         return False
+    
+
+def sincronizar_usuarios_azure():
+    """
+    Busca todos os usuários ativos no Azure AD via Microsoft Graph API
+    e os cria ou atualiza no banco de dados do Django.
+    """
+    User = get_user_model()
+    
+    tenant_id = settings.SOCIALACCOUNT_PROVIDERS['microsoft']['TENANT']
+    client_id = settings.SHAREPOINT_CLIENT_ID # Usando as variáveis que já temos
+    client_secret = settings.SHAREPOINT_CLIENT_SECRET
+
+    authority = f"https://login.microsoftonline.com/{tenant_id}"
+    
+    # Usa a biblioteca MSAL para obter um token de acesso para a APLICAÇÃO
+    app = msal.ConfidentialClientApplication(
+        client_id, authority=authority, client_credential=client_secret
+    )
+    
+    result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    
+    if "access_token" not in result:
+        raise Exception("Não foi possível obter o token de acesso da Microsoft. Verifique as credenciais.")
+
+    access_token = result['access_token']
+    headers = {'Authorization': 'Bearer ' + access_token}
+    
+    # URL da API para buscar usuários
+    # Filtramos para pegar apenas usuários ativos e os campos que nos interessam
+    url = "https://graph.microsoft.com/v1.0/users?$filter=accountEnabled eq true&$select=id,displayName,givenName,surname,mail,userPrincipalName"
+    
+    usuarios_criados = 0
+    usuarios_atualizados = 0
+    
+    while url:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status() # Lança um erro se a requisição falhar
+        data = response.json()
+        
+        for user_data in data.get('value', []):
+            email = user_data.get('mail') or user_data.get('userPrincipalName')
+            if not email:
+                continue # Pula usuários sem e-mail
+
+            # Usamos update_or_create: ele atualiza se encontrar, ou cria se não encontrar
+            user, created = User.objects.update_or_create(
+                username=email, # Usamos o e-mail como username para garantir unicidade
+                defaults={
+                    'email': email,
+                    'first_name': user_data.get('givenName', ''),
+                    'last_name': user_data.get('surname', ''),
+                    'is_active': True # Garante que o usuário está ativo no Django
+                }
+            )
+            
+            if created:
+                usuarios_criados += 1
+                # Define uma senha inutilizável, já que o login será via Microsoft
+                user.set_unusable_password() 
+                user.save()
+            else:
+                usuarios_atualizados += 1
+        
+        # Pega a URL da próxima página de resultados, se houver
+        url = data.get('@odata.nextLink')
+        
+    return f"Sincronização concluída! Usuários criados: {usuarios_criados}. Usuários atualizados: {usuarios_atualizados}."
