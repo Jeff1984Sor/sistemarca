@@ -1,10 +1,12 @@
 services:
   # --- 1. Seu Banco de Dados PostgreSQL ---
-  - type: postgres
+  - type: psql # MANTENHA 'psql'
     name: rcostasystem-db
     databaseName: rcostasystem
     user: rcostasystem_user
     plan: free
+    # Adicione a versão do Postgres para ser mais explícito
+    postgresMajorVersion: 14
 
   # --- 2. Seu Serviço Redis (para o Celery) ---
   - type: redis
