@@ -2,7 +2,7 @@
 import calendar
 import json
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from io import BytesIO
 
 # --- Bibliotecas de Terceiros ---
@@ -55,16 +55,91 @@ from .tasks import buscar_detalhes_email_enviado, processar_email_webhook
 Usuario = get_user_model()
 
 def _mudar_etapa_fluxo(request, caso, nova_etapa):
+    # 'messages' já deve estar importado no topo do arquivo, mas por segurança:
     from django.contrib import messages
+    
     etapa_antiga = caso.etapa_atual
     
     if etapa_antiga:
-        historico = models.HistoricoEtapa.objects.filter(caso=caso, etapa=etapa_antiga, data_saida__isnull=True).first()
+        historico = HistoricoEtapa.objects.filter(caso=caso, etapa=etapa_antiga, data_saida__isnull=True).first()
         if historico:
             historico.data_saida = timezone.now()
             historico.save()
             tempo_gasto = (historico.data_saida - historico.data_entrada).days
-            models.FluxoInterno.objects.create(
+            
+            # CORREÇÃO: Usando 'FluxoInternoModel' como foi importado
+            FluxoInternoModel.objects.create(
+                caso=caso, 
+                data_fluxo=timezone.now().date(), 
+                descricao=f"[WORKFLOW] Etapa '{etapa_antiga.nome}' finalizada. Tempo: {tempo_gasto} dias.", 
+                usuario_criacao=request.user
+            )
+    
+    caso.etapa_atual = nova_etapa
+    caso.data_entrada_fase = timezone.now() if nova_etapa else None # Atualiza também a data de entrada
+    caso.save(update_fields=['etapa_atual', 'data_entrada_fase'])
+
+    if nova_etapa:
+        HistoricoEtapa.objects.create(caso=caso, etapa=nova_etapa)
+        
+        # CORREÇÃO: Usando 'FluxoInternoModel'
+        FluxoInternoModel.objects.create(
+            caso=caso, 
+            data_fluxo=timezone.now().date(), 
+            descricao=f"[WORKFLOW] Caso entrou na etapa: '{nova_etapa.nome}'.", 
+            usuario_criacao=request.user
+        )
+        
+        count_acoes = 0
+        for acao_modelo in nova_etapa.acoes.all():
+            responsavel_final = None
+            if acao_modelo.tipo_responsavel == 'CRIADOR_ACAO':
+                responsavel_final = request.user
+            elif acao_modelo.tipo_responsavel == 'RESPONSAVEL_CASO':
+                if caso.advogado_responsavel:
+                    responsavel_final = caso.advogado_responsavel.user
+            elif acao_modelo.tipo_responsavel == 'USUARIO_FIXO':
+                responsavel_final = acao_modelo.responsavel_fixo
+
+            if not responsavel_final:
+                # Fallback seguro se nenhuma regra se aplicar
+                responsavel_final = caso.advogado_responsavel.user if caso.advogado_responsavel else request.user
+            
+            prazo_final = None
+            if acao_modelo.prazo_dias > 0:
+                start_date = timezone.now()
+                dias_a_adicionar = acao_modelo.prazo_dias
+                # OBS: Lógica de dias úteis simplificada, pode ser aprimorada
+                if acao_modelo.tipo_prazo == 'uteis':
+                    dias_extras = (dias_a_adicionar // 5) * 2 
+                    prazo_final = start_date + timedelta(days=dias_a_adicionar + dias_extras)
+                else: 
+                    prazo_final = start_date + timedelta(days=dias_a_adicionar)
+            
+            InstanciaAcao.objects.create(
+                caso=caso, 
+                acao_modelo=acao_modelo, 
+                responsavel=responsavel_final, 
+                prazo_final=prazo_final
+            )
+            count_acoes += 1
+        
+        if count_acoes > 0:
+            messages.info(request, f"{count_acoes} nova(s) ação(ões) criada(s) para a etapa '{nova_etapa.nome}'.")
+
+    from django.contrib import messages
+    etapa_antiga = caso.etapa_atual
+    
+    if etapa_antiga:
+        # CORRIGIDO: Removido o 'models.'
+        historico = HistoricoEtapa.objects.filter(caso=caso, etapa=etapa_antiga, data_saida__isnull=True).first()
+        if historico:
+            historico.data_saida = timezone.now()
+            historico.save()
+            tempo_gasto = (historico.data_saida - historico.data_entrada).days
+            
+            # CORRIGIDO: Usando 'FluxoInternoModel' que foi importado com 'as'
+            FluxoInternoModel.objects.create(
                 caso=caso, 
                 data_fluxo=timezone.now().date(), 
                 descricao=f"[WORKFLOW] Etapa '{etapa_antiga.nome}' finalizada. Tempo: {tempo_gasto} dias.", 
@@ -75,8 +150,11 @@ def _mudar_etapa_fluxo(request, caso, nova_etapa):
     caso.save(update_fields=['etapa_atual'])
 
     if nova_etapa:
-        models.HistoricoEtapa.objects.create(caso=caso, etapa=nova_etapa)
-        models.FluxoInterno.objects.create(
+        # CORRIGIDO: Removido o 'models.'
+        HistoricoEtapa.objects.create(caso=caso, etapa=nova_etapa)
+        
+        # CORRIGIDO: Usando 'FluxoInternoModel'
+        FluxoInternoModel.objects.create(
             caso=caso, 
             data_fluxo=timezone.now().date(), 
             descricao=f"[WORKFLOW] Caso entrou na etapa: '{nova_etapa.nome}'.", 
@@ -101,13 +179,15 @@ def _mudar_etapa_fluxo(request, caso, nova_etapa):
             if acao_modelo.prazo_dias > 0:
                 start_date = timezone.now()
                 dias_a_adicionar = acao_modelo.prazo_dias
+                # OBS: Lógica de dias úteis simplificada, pode ser aprimorada depois
                 if acao_modelo.tipo_prazo == 'uteis':
                     dias_extras = (dias_a_adicionar // 5) * 2
                     prazo_final = start_date + timedelta(days=dias_a_adicionar + dias_extras)
                 else: 
                     prazo_final = start_date + timedelta(days=dias_a_adicionar)
             
-            models.InstanciaAcao.objects.create(
+            # CORRIGIDO: Removido o 'models.'
+            InstanciaAcao.objects.create(
                 caso=caso, 
                 acao_modelo=acao_modelo, 
                 responsavel=responsavel_final, 
@@ -270,8 +350,8 @@ class CasoDetailView(LoginRequiredMixin, DetailView):
             context['arquivos_sharepoint'] = microsoft_graph_service.listar_arquivos_e_pastas(caso.sharepoint_folder_id)
         
         email_form = forms.EnviarEmailForm()
-        templates = models.EmailTemplate.objects.all()
-        assinaturas = models.UserSignature.objects.filter(usuario=self.request.user)
+        templates = EmailTemplate.objects.all()
+        assinaturas = UserSignature.objects.filter(usuario=self.request.user)
         
         email_form.fields['modelo_id'].choices = [('', '---------')] + [(t.id, t.nome) for t in templates]
         email_form.fields['assinatura_id'].choices = [('', 'Nenhuma')] + [(a.id, a.nome) for a in assinaturas]
@@ -279,21 +359,21 @@ class CasoDetailView(LoginRequiredMixin, DetailView):
         context['email_form'] = email_form
         context['email_templates_json'] = json.dumps({t.id: {'assunto': t.assunto, 'corpo': t.corpo} for t in templates})
         context['user_signatures_json'] = json.dumps({a.id: a.corpo_html for a in assinaturas})
-        context['emails_do_caso'] = models.EmailCaso.objects.filter(caso=caso)
+        context['emails_do_caso'] = EmailCaso.objects.filter(caso=caso)
         
         context['fluxo_interno_form'] = forms.FluxoInternoForm()
         context['andamento_caso_form'] = forms.AndamentoCasoForm()
         context['lancamento_horas_form'] = LancamentoHorasForm()
         
-        context['acoes_pendentes'] = models.InstanciaAcao.objects.filter(caso=caso, status='P').order_by('data_criacao')
-        context['acoes_concluidas'] = models.InstanciaAcao.objects.filter(caso=caso, status='C').order_by('-data_conclusao')
-        context['historico_etapas'] = models.HistoricoEtapa.objects.filter(caso=caso).order_by('data_entrada')
+        context['acoes_pendentes'] = InstanciaAcao.objects.filter(caso=caso, status='P').order_by('data_criacao')
+        context['acoes_concluidas'] = InstanciaAcao.objects.filter(caso=caso, status='C').order_by('-data_conclusao')
+        context['historico_etapas'] = HistoricoEtapa.objects.filter(caso=caso).order_by('data_entrada')
         
         return context
 
 def get_acoes_filtradas(request):
     """Função auxiliar que busca e filtra as InstanciaAcao."""
-    queryset = models.InstanciaAcao.objects.select_related(
+    queryset = InstanciaAcao.objects.select_related(
         'caso__cliente', 'acao_modelo', 'responsavel'
     ).order_by('prazo_final')
 
@@ -328,7 +408,7 @@ def get_acoes_filtradas(request):
     return queryset
 
 class AcaoListView(LoginRequiredMixin, ListView):
-    model = models.InstanciaAcao
+    model = InstanciaAcao
     template_name = 'casos/acao_list.html'
     context_object_name = 'acoes'
     paginate_by = 20
@@ -342,8 +422,8 @@ class AcaoListView(LoginRequiredMixin, ListView):
         
         # Para os filtros do formulário
         context['responsaveis'] = Usuario.objects.filter(is_active=True).order_by('first_name', 'last_name')
-        context['clientes'] = models.Cliente.objects.all().order_by('nome_razao_social')
-        context['status_choices'] = models.InstanciaAcao.STATUS_CHOICES
+        context['clientes'] = Cliente.objects.all().order_by('nome_razao_social')
+        context['status_choices'] = InstanciaAcao.STATUS_CHOICES
         
         # Para manter os filtros na paginação
         query_params = self.request.GET.copy()
@@ -458,7 +538,7 @@ def exportar_casos_excel(request):
 
 @login_required
 def exportar_andamentos_excel(request, caso_pk):
-    caso = get_object_or_404(models.Caso, pk=caso_pk)
+    caso = get_object_or_404(Caso, pk=caso_pk)
     andamentos = caso.andamentos_caso.all()
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = f'attachment; filename="andamentos_caso_{caso.id}.xlsx"'
@@ -486,7 +566,7 @@ def exportar_andamentos_excel(request, caso_pk):
 
 @login_required
 def exportar_andamentos_pdf(request, caso_pk):
-    caso = get_object_or_404(models.Caso, pk=caso_pk)
+    caso = get_object_or_404(Caso, pk=caso_pk)
     andamentos = caso.andamentos_caso.all()
     logo_url_completa = None
     try:
@@ -506,7 +586,7 @@ def exportar_andamentos_pdf(request, caso_pk):
 
 @login_required
 def exportar_timesheet_excel(request, caso_pk):
-    caso = get_object_or_404(models.Caso, pk=caso_pk)
+    caso = get_object_or_404(Caso, pk=caso_pk)
     timesheets = caso.timesheets.all().order_by('data_execucao')
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = f'attachment; filename="timesheet_caso_{caso.id}.xlsx"'
@@ -546,7 +626,7 @@ def exportar_timesheet_excel(request, caso_pk):
 
 @login_required
 def exportar_timesheet_pdf(request, caso_pk):
-    caso = get_object_or_404(models.Caso, pk=caso_pk)
+    caso = get_object_or_404(Caso, pk=caso_pk)
     timesheets = caso.timesheets.all().order_by('data_execucao')
     logo_url_completa = None
     try:
@@ -820,7 +900,7 @@ def enviar_timesheet_email(request, caso_pk):
 
 @login_required
 def add_timesheet(request, caso_pk):
-    caso = get_object_or_404(models.Caso, pk=caso_pk)
+    caso = get_object_or_404(Caso, pk=caso_pk)
     if request.method == 'POST':
         form = forms.TimesheetForm(request.POST)
         if form.is_valid():
@@ -870,13 +950,13 @@ def add_produto_ajax(request):
 
 @login_required
 def executar_acao(request, acao_pk, opcao_pk=None):
-    instancia_acao = get_object_or_404(models.InstanciaAcao, pk=acao_pk)
+    instancia_acao = get_object_or_404(InstanciaAcao, pk=acao_pk)
     caso = instancia_acao.caso
     opcao_decisao = None
     label_decisao = "Concluída"
 
     if opcao_pk:
-        opcao_decisao = get_object_or_404(models.OpcaoDecisao, pk=opcao_pk)
+        opcao_decisao = get_object_or_404(OpcaoDecisao, pk=opcao_pk)
         label_decisao = opcao_decisao.label_do_botao
 
     if request.method == 'POST':
@@ -887,20 +967,20 @@ def executar_acao(request, acao_pk, opcao_pk=None):
         instancia_acao.descricao_conclusao = descricao_conclusao
         instancia_acao.save()
         
-        models.FluxoInterno.objects.create(caso=caso, data_fluxo=timezone.now().date(), descricao=f"[AÇÃO] '{instancia_acao.acao_modelo.titulo}' concluída com decisão '{label_decisao}'.\n{descricao_conclusao}", usuario_criacao=request.user)
+        FluxoInterno.objects.create(caso=caso, data_fluxo=timezone.now().date(), descricao=f"[AÇÃO] '{instancia_acao.acao_modelo.titulo}' concluída com decisão '{label_decisao}'.\n{descricao_conclusao}", usuario_criacao=request.user)
 
         if opcao_decisao:
             if opcao_decisao.avancar_proxima_etapa:
                 etapa_atual = caso.etapa_atual
                 if etapa_atual:
-                    proxima_etapa = models.EtapaFluxo.objects.filter(fluxo_trabalho=etapa_atual.fluxo_trabalho, ordem__gt=etapa_atual.ordem).order_by('ordem').first()
+                    proxima_etapa = EtapaFluxo.objects.filter(fluxo_trabalho=etapa_atual.fluxo_trabalho, ordem__gt=etapa_atual.ordem).order_by('ordem').first()
                     _mudar_etapa_fluxo(request, caso, proxima_etapa)
                     if not proxima_etapa: messages.success(request, "Fluxo de trabalho finalizado.")
             elif opcao_decisao.mudar_etapa_para:
                 _mudar_etapa_fluxo(request, caso, opcao_decisao.mudar_etapa_para)
             
             if opcao_decisao.criar_nova_acao:
-                models.InstanciaAcao.objects.create(caso=caso, acao_modelo=opcao_decisao.criar_nova_acao, responsavel=request.user)
+                InstanciaAcao.objects.create(caso=caso, acao_modelo=opcao_decisao.criar_nova_acao, responsavel=request.user)
             
             if opcao_decisao.atualizar_status_caso:
                 caso.status = opcao_decisao.atualizar_status_caso
@@ -915,7 +995,7 @@ def executar_acao(request, acao_pk, opcao_pk=None):
 
 @login_required
 def reabrir_acao(request, acao_instancia_pk):
-    acao_instancia = get_object_or_404(models.InstanciaAcao, pk=acao_instancia_pk)
+    acao_instancia = get_object_or_404(InstanciaAcao, pk=acao_instancia_pk)
     if request.method == 'POST':
         acao_instancia.status = 'P'
         acao_instancia.data_conclusao = None
@@ -925,7 +1005,7 @@ def reabrir_acao(request, acao_instancia_pk):
 
 @login_required
 def deletar_acao(request, acao_instancia_pk):
-    acao_instancia = get_object_or_404(models.InstanciaAcao, pk=acao_instancia_pk)
+    acao_instancia = get_object_or_404(InstanciaAcao, pk=acao_instancia_pk)
     caso_pk = acao_instancia.caso.pk
     if request.method == 'POST':
         acao_instancia.delete()
@@ -942,7 +1022,7 @@ def deletar_acao(request, acao_instancia_pk):
 
 @login_required
 def add_timesheet(request, caso_pk):
-    caso = get_object_or_404(models.Caso, pk=caso_pk)
+    caso = get_object_or_404(Caso, pk=caso_pk)
     if request.method == 'POST':
         # Agora usamos o novo formulário inteligente
         form = LancamentoHorasForm(request.POST)
@@ -959,7 +1039,7 @@ def add_timesheet(request, caso_pk):
 
 @login_required
 def add_lancamento_horas(request, caso_pk):
-    caso = get_object_or_404(models.Caso, pk=caso_pk)
+    caso = get_object_or_404(Caso, pk=caso_pk)
     if request.method == 'POST':
         form = LancamentoHorasForm(request.POST)
         if form.is_valid():
@@ -977,7 +1057,7 @@ def add_lancamento_horas(request, caso_pk):
     return redirect(reverse('casos:caso_detail', kwargs={'pk': caso_pk}) + '#timesheet-tab-pane')
 
 class LancamentoHorasUpdateView(LoginRequiredMixin, UpdateView):
-    model = models.Timesheet
+    model = Timesheet
     form_class = forms.LancamentoHorasForm
     template_name = 'casos/lancamento_horas_form.html'
 
@@ -1121,7 +1201,7 @@ def exportar_despesas_excel(request, caso_pk):
 def exportar_despesas_pdf(request, caso_pk):
     # --- Importações locais ---
     from django.http import HttpResponse
-    from django.db.models import Sum
+    from django.db.models import Sum,Count, Q, Sum, functions
     from django.utils import timezone
     from weasyprint import HTML
     from .models import Caso
