@@ -1,6 +1,7 @@
 # casos/sharepoint_service.py
 
 import requests
+import os
 import json
 import msal
 from django.conf import settings
@@ -316,13 +317,23 @@ def sincronizar_usuarios_azure():
     """
     User = get_user_model()
     
-    tenant_id = settings.SOCIALACCOUNT_PROVIDERS['microsoft']['TENANT']
-    client_id = settings.SHAREPOINT_CLIENT_ID # Usando as variáveis que já temos
-    client_secret = settings.SHAREPOINT_CLIENT_SECRET
-
+    # --- CORREÇÃO APLICADA AQUI ---
+    # Lendo as credenciais diretamente das variáveis de ambiente
+    tenant_id = os.environ.get('SHAREPOINT_TENANT_ID')
+    client_id = os.environ.get('SHAREPOINT_CLIENT_ID')
+    client_secret = os.environ.get('SHAREPOINT_CLIENT_SECRET')
+    
+    # Verificação robusta para garantir que todas as credenciais existem
+    if not all([tenant_id, client_id, client_secret]):
+        raise ValueError(
+            "Uma ou mais variáveis de ambiente necessárias não foram configuradas: "
+            "SHAREPOINT_TENANT_ID, SHAREPOINT_CLIENT_ID, SHAREPOINT_CLIENT_SECRET"
+        )
+            
     authority = f"https://login.microsoftonline.com/{tenant_id}"
     
     # Usa a biblioteca MSAL para obter um token de acesso para a APLICAÇÃO
+    # Este token usa as permissões de "Aplicativo" (User.Read.All), não as do usuário logado.
     app = msal.ConfidentialClientApplication(
         client_id, authority=authority, client_credential=client_secret
     )
@@ -330,33 +341,42 @@ def sincronizar_usuarios_azure():
     result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
     
     if "access_token" not in result:
-        raise Exception("Não foi possível obter o token de acesso da Microsoft. Verifique as credenciais.")
+        # Fornece mais detalhes do erro, se disponíveis na resposta da Microsoft
+        error_details = result.get('error_description', 'Nenhum detalhe adicional.')
+        raise ConnectionError(f"Não foi possível obter o token de acesso da Microsoft. Detalhes: {error_details}")
 
     access_token = result['access_token']
     headers = {'Authorization': 'Bearer ' + access_token}
     
     # URL da API para buscar usuários
-    # Filtramos para pegar apenas usuários ativos e os campos que nos interessam
+    # Filtramos para pegar apenas usuários ativos ('accountEnabled eq true')
+    # e selecionamos apenas os campos que nos interessam para otimizar a resposta
     url = "https://graph.microsoft.com/v1.0/users?$filter=accountEnabled eq true&$select=id,displayName,givenName,surname,mail,userPrincipalName"
     
     usuarios_criados = 0
     usuarios_atualizados = 0
+    total_azure = 0
     
+    # O loop 'while url:' lida com a paginação da API da Microsoft (se houver mais de 100 usuários)
     while url:
         response = requests.get(url, headers=headers)
-        response.raise_for_status() # Lança um erro se a requisição falhar
+        response.raise_for_status() # Lança um erro HTTP se a requisição falhar (ex: 401, 403)
         data = response.json()
         
-        for user_data in data.get('value', []):
+        lista_usuarios_azure = data.get('value', [])
+        total_azure += len(lista_usuarios_azure)
+        
+        for user_data in lista_usuarios_azure:
+            # Usa 'mail' como primário, mas 'userPrincipalName' como fallback
             email = user_data.get('mail') or user_data.get('userPrincipalName')
             if not email:
-                continue # Pula usuários sem e-mail
+                continue # Pula usuários sem um identificador de e-mail
 
-            # Usamos update_or_create: ele atualiza se encontrar, ou cria se não encontrar
+            # Usa update_or_create: ele atualiza se encontrar o usuário pelo username, ou cria se não encontrar
             user, created = User.objects.update_or_create(
-                username=email, # Usamos o e-mail como username para garantir unicidade
+                username=email.lower(), # Salva o username em minúsculas para evitar duplicatas
                 defaults={
-                    'email': email,
+                    'email': email.lower(),
                     'first_name': user_data.get('givenName', ''),
                     'last_name': user_data.get('surname', ''),
                     'is_active': True # Garante que o usuário está ativo no Django
@@ -374,4 +394,9 @@ def sincronizar_usuarios_azure():
         # Pega a URL da próxima página de resultados, se houver
         url = data.get('@odata.nextLink')
         
-    return f"Sincronização concluída! Usuários criados: {usuarios_criados}. Usuários atualizados: {usuarios_atualizados}."
+    return (
+        f"Sincronização concluída! "
+        f"{total_azure} usuários encontrados no Azure AD. "
+        f"Usuários criados no sistema: {usuarios_criados}. "
+        f"Usuários atualizados: {usuarios_atualizados}."
+    )
