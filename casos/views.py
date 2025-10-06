@@ -1,85 +1,58 @@
-from . import models
-from . import forms
-
-# Django Core Imports
-from datetime import timedelta, date
-import json
-import os
-from io import BytesIO
-from collections import defaultdict
+# --- Bibliotecas Padrão do Python ---
 import calendar
-from .microsoft_graph_service import enviar_email_graph, criar_pasta_caso, criar_subpastas
-from notificacoes.servicos import preparar_notificacao # Vamos criar/renomear esta função
-from .models import FluxoTrabalho, FluxoInterno as FluxoInternoModel
-from django.contrib import messages
-from django.shortcuts import redirect
-from notificacoes.servicos import preparar_notificacao
-from django.urls import reverse_lazy
-# Django Imports
+import json
+from collections import defaultdict
+from datetime import date
+from io import BytesIO
+
+# --- Bibliotecas de Terceiros ---
+import openpyxl
+from openpyxl.styles import Alignment, Font, PatternFill
+from weasyprint import HTML
+
+# --- Bibliotecas do Django ---
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q, Count, Sum # Adicionei o Sum aqui
+from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncMonth
-from django.http import JsonResponse, HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
-from django.urls import reverse_lazy, reverse
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import (CreateView, DeleteView, DetailView, ListView,
+                                  TemplateView, UpdateView)
+
+# --- Importações de Outros Apps do Projeto ---
+from configuracoes.models import LogoConfig
+from notificacoes.servicos import preparar_notificacao
+
+# --- Importações Locais do App 'casos' ---
+from . import forms
 from . import microsoft_graph_service
-from django.views.generic import ListView, CreateView, DetailView, UpdateView, TemplateView, DeleteView
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
-from django.template.loader import render_to_string
-from django.db.models import Sum
-import openpyxl
-from openpyxl.styles import Font, Alignment, PatternFill 
-from weasyprint import HTML
-from .models import Caso, DespesaCaso
-from configuracoes.models import LogoConfig
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import get_object_or_404
-from .models import Caso
-from .models import AcordoCaso, ParcelaAcordo
-from .forms import AcordoCasoForm
-
-# Third-Party Imports
-import openpyxl
-from openpyxl.styles import Font, Alignment
-from weasyprint import HTML
-
-# Local App Imports
-from configuracoes.models import LogoConfig
-from notificacoes.servicos import enviar_notificacao
-
-# --- Imports do App 'casos' ---
-from .microsoft_graph_service import (
-    criar_pasta_caso, criar_subpastas, listar_arquivos_e_pastas, 
-    upload_arquivo, deletar_item, criar_nova_pasta, obter_url_preview,
-    enviar_email as enviar_email_service
-)
-
-from .models import (
-    Advogado, AndamentoCaso, AcaoEtapa, Caso, Cliente, Campo, EmailCaso, 
-    EmailTemplate, EstruturaPasta, EtapaFluxo, FluxoInterno as FluxoInternoModel, 
-    FluxoTrabalho, HistoricoEtapa, InstanciaAcao, OpcaoDecisao, Produto, Status, 
-    Timesheet, UserSignature, ValorCampoCaso,
-    # Importando os novos modelos
-    DespesaCaso, AcordoCaso, ParcelaAcordo
-)
-
-from .forms import (
-    AndamentoCasoForm, CasoCreateForm, CasoUpdateForm, EnviarEmailForm, 
-    FluxoInternoForm, LancamentoHorasForm, DespesaCasoForm
-)
-
+from .forms import (AcordoCasoForm, AndamentoCasoForm, CasoCreateForm,
+                    CasoUpdateForm, DespesaCasoForm, EnviarEmailForm,
+                    FluxoInternoForm, LancamentoHorasForm)
+from .microsoft_graph_service import (criar_nova_pasta, criar_pasta_caso,
+                                      criar_subpastas, deletar_item,
+                                      enviar_email_graph,
+                                      listar_arquivos_e_pastas,
+                                      obter_url_preview, upload_arquivo)
+from .models import (AcaoEtapa, AcordoCaso, Advogado, AndamentoCaso, Campo,
+                     Caso, Cliente, DespesaCaso, EmailCaso, EmailTemplate,
+                     EstruturaPasta, EtapaFluxo, FluxoInterno as FluxoInternoModel,
+                     FluxoTrabalho, GraphWebhookSubscription, HistoricoEtapa,
+                     InstanciaAcao, OpcaoDecisao, ParcelaAcordo, Produto,
+                     RegraCampo, Status, Timesheet, UserSignature,
+                     ValorCampoCaso)
 from .tasks import buscar_detalhes_email_enviado, processar_email_webhook
 
+# --- Definições Globais ---
 Usuario = get_user_model()
-
 
 def _mudar_etapa_fluxo(request, caso, nova_etapa):
     from django.contrib import messages
