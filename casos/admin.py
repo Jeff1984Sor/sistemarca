@@ -1,17 +1,79 @@
-# casos/admin.py (COMPLETO E COM O WORKFLOW UNIFICADO)
+# casos/admin.py (CORRIGIDO PARA OS ERROS DE AUTOCOMPLETE)
 
 from django.contrib import admin
 import nested_admin
 from .models import (
+    # ... (TODAS as suas importações de modelos)
     Campo, OpcaoCampo, EstruturaPasta, Produto, RegraCampo, Caso,
     AndamentoCaso, ValorCampoCaso, Advogado, Status, FluxoInterno,
     Timesheet, EmailTemplate, UserSignature, EmailCaso, GraphWebhookSubscription,
     FluxoTrabalho, EtapaFluxo, AcaoEtapa, OpcaoDecisao, InstanciaAcao, HistoricoEtapa,
-    DespesaCaso, AcordoCaso, ParcelaAcordo
+    DespesaCaso, AcordoCaso, ParcelaAcordo, Cliente # Importe o Cliente também
 )
 
 # ==============================================================================
-# INLINES: Seções que aparecerão DENTRO da página de outros modelos
+# ADMINS PARA MODELOS REFERENCIADOS NO AUTOCOMPLETE
+# ==============================================================================
+
+# Para que o autocomplete de Cliente funcione
+@admin.register(Cliente)
+class ClienteAdmin(admin.ModelAdmin):
+    search_fields = ['nome_razao_social', 'cpf_cnpj']
+
+# Para que o autocomplete de Status funcione
+@admin.register(Status)
+class StatusAdmin(admin.ModelAdmin):
+    search_fields = ['nome']
+
+# Para que o autocomplete de Produto funcione
+@admin.register(Produto)
+class ProdutoAdmin(admin.ModelAdmin):
+    search_fields = ['nome']
+
+# Para que o autocomplete de Advogado funcione
+@admin.register(Advogado)
+class AdvogadoAdmin(admin.ModelAdmin):
+    search_fields = ['user__first_name', 'user__last_name', 'user__username']
+
+# Para que o autocomplete de EtapaFluxo funcione (mesmo sendo inline)
+@admin.register(EtapaFluxo)
+class EtapaFluxoAdmin(admin.ModelAdmin):
+    search_fields = ['nome']
+    list_display = ('nome', 'fluxo_trabalho', 'ordem')
+
+
+# ==============================================================================
+# ADMIN DO WORKFLOW ANINHADO (Estrutura Unificada)
+# ==============================================================================
+
+class OpcaoDecisaoInline(nested_admin.NestedTabularInline):
+    model = OpcaoDecisao
+    extra = 1
+    fk_name = 'acao_etapa'
+
+class AcaoEtapaInline(nested_admin.NestedStackedInline):
+    model = AcaoEtapa
+    extra = 1
+    inlines = [OpcaoDecisaoInline]
+    fk_name = 'etapa_fluxo'
+    ordering = ['titulo']
+    autocomplete_fields = ['responsavel_fixo']
+
+class EtapaFluxoInline(nested_admin.NestedStackedInline):
+    model = EtapaFluxo
+    extra = 1
+    inlines = [AcaoEtapaInline]
+    fk_name = 'fluxo_trabalho'
+    ordering = ['ordem']
+
+@admin.register(FluxoTrabalho)
+class FluxoTrabalhoAdmin(nested_admin.NestedModelAdmin):
+    list_display = ('nome', 'cliente', 'produto')
+    inlines = [EtapaFluxoInline]
+    autocomplete_fields = ['cliente', 'produto'] # Agora vai funcionar
+
+# ==============================================================================
+# INLINES e ADMINS PRINCIPAIS
 # ==============================================================================
 
 class DespesaCasoInline(nested_admin.NestedTabularInline):
@@ -35,45 +97,12 @@ class ValorCampoCasoInline(nested_admin.NestedTabularInline):
     extra = 0
     autocomplete_fields = ['campo']
 
-# ==============================================================================
-# ADMIN DO WORKFLOW ANINHADO (ESTRUTURA UNIFICADA)
-# ==============================================================================
-
-class OpcaoDecisaoInline(nested_admin.NestedTabularInline):
-    model = OpcaoDecisao
-    extra = 1
-    fk_name = 'acao_etapa'
-
-class AcaoEtapaInline(nested_admin.NestedStackedInline):
-    model = AcaoEtapa
-    extra = 1
-    inlines = [OpcaoDecisaoInline]
-    fk_name = 'etapa_fluxo'
-    ordering = ['titulo']
-
-class EtapaFluxoInline(nested_admin.NestedStackedInline):
-    model = EtapaFluxo
-    extra = 1
-    inlines = [AcaoEtapaInline]
-    fk_name = 'fluxo_trabalho'
-    ordering = ['ordem']
-
-@admin.register(FluxoTrabalho)
-class FluxoTrabalhoAdmin(nested_admin.NestedModelAdmin):
-    list_display = ('nome', 'cliente', 'produto')
-    inlines = [EtapaFluxoInline]
-    autocomplete_fields = ['cliente', 'produto'] # Adicionado para facilitar
-
-# ==============================================================================
-# ADMIN PRINCIPAL: A configuração das páginas de listagem e edição
-# ==============================================================================
-
 @admin.register(RegraCampo)
 class RegraCampoAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'cliente', 'produto')
     list_filter = ('cliente', 'produto')
     filter_horizontal = ('campos',)
-    autocomplete_fields = ['cliente', 'produto']
+    autocomplete_fields = ['cliente', 'produto'] # Agora vai funcionar
 
 @admin.register(Caso)
 class CasoAdmin(nested_admin.NestedModelAdmin):
@@ -81,12 +110,13 @@ class CasoAdmin(nested_admin.NestedModelAdmin):
     list_filter = ('status', 'cliente', 'produto', 'advogado_responsavel')
     search_fields = ('titulo_caso', 'cliente__nome_razao_social')
     date_hierarchy = 'data_entrada_rca'
-    autocomplete_fields = ['cliente', 'produto', 'status', 'etapa_atual', 'advogado_responsavel']
+    autocomplete_fields = ['cliente', 'produto', 'status', 'etapa_atual', 'advogado_responsavel'] # Agora vai funcionar
     inlines = [ValorCampoCasoInline, AcordoCasoInline, DespesaCasoInline]
 
 @admin.register(AcordoCaso)
 class AcordoCasoAdmin(nested_admin.NestedModelAdmin):
     list_display = ('id', 'caso', 'data_acordo', 'quantidade_parcelas', 'valor_parcela', 'valor_total')
+    search_fields = ['caso__titulo_caso', 'descricao'] # Necessário para o autocomplete de Parcela
     inlines = [ParcelaAcordoInline]
     autocomplete_fields = ['caso']
 
@@ -95,35 +125,30 @@ class ParcelaAcordoAdmin(admin.ModelAdmin):
     list_display = ('id', 'acordo', 'numero_parcela', 'data_vencimento', 'situacao')
     list_filter = ('situacao', 'data_vencimento')
     list_editable = ('situacao',)
-    autocomplete_fields = ['acordo']
+    autocomplete_fields = ['acordo'] # Agora vai funcionar
 
 @admin.register(Campo)
 class CampoAdmin(admin.ModelAdmin):
     list_display = ('nome_label', 'nome_tecnico', 'tipo_campo')
-    search_fields = ('nome_label', 'nome_tecnico')
+    search_fields = ('nome_label', 'nome_tecnico') # Necessário para o autocomplete
     prepopulated_fields = {'nome_tecnico': ('nome_label',)}
 
 # ==============================================================================
-# REGISTRO DOS OUTROS MODELOS (SEM OS DO WORKFLOW)
+# REGISTRO DOS OUTROS MODELOS
 # ==============================================================================
-
-# Modelos que não precisam de uma configuração de admin customizada no momento
+# A maioria dos registros agora está com @admin.register, então esta lista fica menor
 admin.site.register(OpcaoCampo)
 admin.site.register(EstruturaPasta)
-admin.site.register(Produto)
 admin.site.register(AndamentoCaso)
 admin.site.register(ValorCampoCaso)
-admin.site.register(Advogado)
-admin.site.register(Status)
 admin.site.register(FluxoInterno)
 admin.site.register(Timesheet)
 admin.site.register(EmailTemplate)
 admin.site.register(UserSignature)
 admin.site.register(EmailCaso)
 admin.site.register(GraphWebhookSubscription)
+admin.site.register(AcaoEtapa)
+admin.site.register(OpcaoDecisao)
 admin.site.register(InstanciaAcao)
 admin.site.register(HistoricoEtapa)
 admin.site.register(DespesaCaso)
-
-# Os modelos do Workflow (EtapaFluxo, AcaoEtapa, OpcaoDecisao)
-# NÃO são registrados aqui porque já estão como "inlines" dentro do FluxoTrabalhoAdmin.
