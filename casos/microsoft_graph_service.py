@@ -85,7 +85,14 @@ def criar_subpastas(id_pasta_pai, nomes_subpastas):
     for nome in nomes_subpastas:
         url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{id_pasta_pai}/children"
         payload = {"name": nome, "folder": {}}
-        requests.post(url, headers=headers, json=payload)
+        try:
+            # Adicionamos um timeout e verificação de SSL explícita
+            response = requests.post(url, headers=headers, json=payload, timeout=10, verify=True)
+            response.raise_for_status()
+        except requests.exceptions.SSLError as e:
+            print(f"!!! ERRO DE SSL AO CRIAR SUBPASTA '{nome}': {e}")
+        except requests.exceptions.RequestException as e:
+            print(f"!!! ERRO DE REQUISIÇÃO AO CRIAR SUBPASTA '{nome}': {e}")
 
 def listar_arquivos_e_pastas(folder_id):
     access_token = get_app_graph_token()
