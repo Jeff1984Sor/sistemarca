@@ -311,87 +311,83 @@ def enviar_email(remetente_email, para, assunto, corpo, salvar_em_enviados=True)
     
 
 def sincronizar_usuarios_azure():
-    """
-    Busca todos os usuários ativos no Azure AD via Microsoft Graph API
-    e os cria ou atualiza no banco de dados do Django.
-    """
     User = get_user_model()
     
-    # --- CORREÇÃO APLICADA AQUI ---
-    # Lendo as credenciais diretamente das variáveis de ambiente
     tenant_id = os.environ.get('SHAREPOINT_TENANT_ID')
     client_id = os.environ.get('SHAREPOINT_CLIENT_ID')
     client_secret = os.environ.get('SHAREPOINT_CLIENT_SECRET')
     
-    # Verificação robusta para garantir que todas as credenciais existem
     if not all([tenant_id, client_id, client_secret]):
-        raise ValueError(
-            "Uma ou mais variáveis de ambiente necessárias não foram configuradas: "
-            "SHAREPOINT_TENANT_ID, SHAREPOINT_CLIENT_ID, SHAREPOINT_CLIENT_SECRET"
-        )
+        raise ValueError("Variáveis de ambiente (TENANT_ID, CLIENT_ID, CLIENT_SECRET) não configuradas.")
             
     authority = f"https://login.microsoftonline.com/{tenant_id}"
-    
-    # Usa a biblioteca MSAL para obter um token de acesso para a APLICAÇÃO
-    # Este token usa as permissões de "Aplicativo" (User.Read.All), não as do usuário logado.
-    app = msal.ConfidentialClientApplication(
-        client_id, authority=authority, client_credential=client_secret
-    )
-    
+    app = msal.ConfidentialClientApplication(client_id, authority=authority, client_credential=client_secret)
     result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
     
     if "access_token" not in result:
-        # Fornece mais detalhes do erro, se disponíveis na resposta da Microsoft
         error_details = result.get('error_description', 'Nenhum detalhe adicional.')
         raise ConnectionError(f"Não foi possível obter o token de acesso da Microsoft. Detalhes: {error_details}")
 
     access_token = result['access_token']
     headers = {'Authorization': 'Bearer ' + access_token}
     
-    # URL da API para buscar usuários
-    # Filtramos para pegar apenas usuários ativos ('accountEnabled eq true')
-    # e selecionamos apenas os campos que nos interessam para otimizar a resposta
     url = "https://graph.microsoft.com/v1.0/users?$filter=accountEnabled eq true&$select=id,displayName,givenName,surname,mail,userPrincipalName"
     
     usuarios_criados = 0
     usuarios_atualizados = 0
     total_azure = 0
     
-    # O loop 'while url:' lida com a paginação da API da Microsoft (se houver mais de 100 usuários)
     while url:
         response = requests.get(url, headers=headers)
-        response.raise_for_status() # Lança um erro HTTP se a requisição falhar (ex: 401, 403)
+        response.raise_for_status()
         data = response.json()
         
         lista_usuarios_azure = data.get('value', [])
         total_azure += len(lista_usuarios_azure)
         
         for user_data in lista_usuarios_azure:
-            # Usa 'mail' como primário, mas 'userPrincipalName' como fallback
             email = user_data.get('mail') or user_data.get('userPrincipalName')
             if not email:
-                continue # Pula usuários sem um identificador de e-mail
+                continue
 
-            # Usa update_or_create: ele atualiza se encontrar o usuário pelo username, ou cria se não encontrar
+            # --- LÓGICA APRIMORADA DE NOMES ---
+            first_name = user_data.get('givenName')
+            last_name = user_data.get('surname')
+            display_name = user_data.get('displayName')
+
+            # Se não houver nome e sobrenome, tenta usar o "Nome de Exibição"
+            if not first_name and not last_name and display_name:
+                parts = display_name.split(' ')
+                first_name = parts[0]
+                if len(parts) > 1:
+                    last_name = ' '.join(parts[1:])
+
+            # Se o primeiro nome ainda estiver vazio, usa a parte do e-mail antes do @
+            if not first_name:
+                first_name = email.split('@')[0]
+            
+            # Se o sobrenome ainda estiver vazio, usa um placeholder para não dar erro
+            if not last_name:
+                last_name = "(sobrenome não informado)" # Um placeholder claro
+            
             user, created = User.objects.update_or_create(
-                username=email.lower(), # Salva o username em minúsculas para evitar duplicatas
+                username=email.lower(),
                 defaults={
                     'email': email.lower(),
-                    'first_name': user_data.get('givenName', ''),
-                    'last_name': user_data.get('surname', ''),
-                    'is_active': True # Garante que o usuário está ativo no Django
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'is_active': True
                 }
             )
+            # ------------------------------------
             
             if created:
                 usuarios_criados += 1
-                # Define uma senha inutilizável, já que o login será via Microsoft
                 user.set_unusable_password() 
                 user.save()
             else:
                 usuarios_atualizados += 1
         
-        # Pega a URL da próxima página de resultados, se houver
         url = data.get('@odata.nextLink')
         
     return (
