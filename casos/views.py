@@ -13,6 +13,7 @@ from notificacoes.servicos import preparar_notificacao # Vamos criar/renomear es
 from .models import FluxoTrabalho, FluxoInterno as FluxoInternoModel
 from django.contrib import messages
 from django.shortcuts import redirect
+from notificacoes.servicos import preparar_notificacao
 from django.urls import reverse_lazy
 # Django Imports
 from django.conf import settings
