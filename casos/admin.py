@@ -15,11 +15,6 @@ from .models import (
 # ADMINS PARA MODELOS REFERENCIADOS NO AUTOCOMPLETE
 # ==============================================================================
 
-# Para que o autocomplete de Cliente funcione
-@admin.register(Cliente)
-class ClienteAdmin(admin.ModelAdmin):
-    search_fields = ['nome_razao_social', 'cpf_cnpj']
-
 # Para que o autocomplete de Status funcione
 @admin.register(Status)
 class StatusAdmin(admin.ModelAdmin):
