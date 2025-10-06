@@ -1,86 +1,67 @@
-# notificacoes/servicos.py
+# notificacoes/servicos.py (ATUALIZADO E SIMPLIFICADO)
 
-import json
 from django.template import Template, Context
-from django.utils import timezone
 from .models import TemplateEmail
 from casos.models import Caso, FluxoInterno
-from casos.microsoft_graph_service import enviar_email as enviar_email_graph
+from django.utils import timezone
 
-def enviar_notificacao(slug_evento, contexto, anexo_buffer=None, nome_anexo=None, content_type_anexo=None):
+# A importação do 'enviar_email_graph' foi REMOVIDA daqui, 
+# pois a view agora é responsável pelo envio.
+
+def preparar_notificacao(slug_evento, contexto):
     """
-    Função central para enviar e-mails via Microsoft Graph baseados em modelos
-    e registrar a comunicação no Fluxo Interno do caso.
-    """
+    Função central para PREPARAR os dados de um e-mail a ser enviado.
+    Ela encontra o template, renderiza o conteúdo e determina os destinatários.
     
+    Retorna: (sucesso, dados_ou_erro)
+    - Em caso de sucesso: (True, {'assunto': ..., 'corpo': ..., 'destinatarios': [...]})
+    - Em caso de erro: (False, "Mensagem de erro")
+    """
     try:
+        # 1. Encontra o template de e-mail ativo para o evento
         template_email = TemplateEmail.objects.get(evento__slug=slug_evento, ativo=True)
     except TemplateEmail.DoesNotExist:
-        return False, f"Nenhum template ativo para o evento '{slug_evento}'."
+        return False, f"Nenhum template de e-mail ativo encontrado para o evento '{slug_evento}'."
     except TemplateEmail.MultipleObjectsReturned:
+        # Se houver múltiplos, pega o primeiro como fallback seguro
         template_email = TemplateEmail.objects.filter(evento__slug=slug_evento, ativo=True).first()
 
     try:
+        # 2. Renderiza o assunto e o corpo do e-mail usando o contexto fornecido
         template_assunto = Template(template_email.assunto)
         template_corpo = Template(template_email.corpo)
         contexto_django = Context(contexto)
-        assunto_final = template_assunto.render(contexto_django)
+        
+        assunto_final = template_assunto.render(contexto_django).strip()
         corpo_final = template_corpo.render(contexto_django)
     except Exception as e:
-        return False, f"Erro ao processar o template: {e}"
+        return False, f"Erro ao renderizar o template de e-mail: {e}"
 
+    # 3. Monta a lista de e-mails dos destinatários
     lista_emails = []
+    
+    # Adiciona destinatários fixos, se houver
     if template_email.destinatarios_fixos:
-        lista_emails.extend([email.strip() for email in template_email.destinatarios_fixos.split(',') if email.strip()])
+        emails_fixos = [email.strip() for email in template_email.destinatarios_fixos.split(',') if email.strip()]
+        lista_emails.extend(emails_fixos)
+    
+    # Adiciona usuários dos grupos selecionados
     for grupo in template_email.enviar_para_grupos.all():
         for user in grupo.user_set.all():
             if user.email and user.email not in lista_emails:
                 lista_emails.append(user.email)
     
+    # Garante que não haja e-mails duplicados
     destinatarios_finais = sorted(list(set(lista_emails)))
+    
     if not destinatarios_finais:
-        return False, "Nenhum destinatário configurado para este evento."
+        return False, "Nenhum destinatário foi configurado para este evento de notificação."
 
-    usuario_acao = contexto.get('usuario_acao')
-    if not usuario_acao or not usuario_acao.email:
-        return False, "Erro: O usuário que disparou a ação não tem um e-mail válido para ser o remetente."
-
-    try:
-        destinatarios_str = ", ".join(destinatarios_finais)
-        
-        sucesso = enviar_email_graph(
-            remetente_email=usuario_acao.email,
-            para=destinatarios_str,
-            assunto=assunto_final,
-            corpo=corpo_final,
-        )
-        
-        if not sucesso:
-            return False, "O serviço da Microsoft retornou uma falha ao tentar enviar o e-mail."
-
-        caso_obj = contexto.get('caso')
-        if caso_obj and isinstance(caso_obj, Caso):
-            resumo_email = f"Evento: {template_email.evento.nome}"
-            conteudo_completo = (
-                f"De: {usuario_acao.email}\n"
-                f"Para: {destinatarios_str}\n"
-                f"Assunto: {assunto_final}\n\n"
-                f"--- Conteúdo ---\n{corpo_final}"
-            )
-            if nome_anexo:
-                conteudo_completo += f"\n\nAnexo: {nome_anexo}"
-            
-            descricao_fluxo_interno = f"[EMAIL]::{resumo_email}|||{conteudo_completo}"
-            
-            FluxoInterno.objects.create(
-                caso=caso_obj,
-                data_fluxo=timezone.now().date(),
-                descricao=descricao_fluxo_interno,
-                usuario_criacao=usuario_acao
-            )
-        
-        return True, "E-mail enviado com sucesso via Microsoft Graph."
-        
-    except Exception as e:
-        print(f"ERRO CRÍTICO ao tentar enviar notificação '{slug_evento}' via Graph. Erro: {e}")
-        return False, "Erro técnico no envio do e-mail."
+    # 4. Retorna um dicionário com todos os dados prontos para o envio
+    dados_email = {
+        'assunto': assunto_final,
+        'corpo': corpo_final,
+        'destinatarios': destinatarios_finais
+    }
+    
+    return True, dados_email

@@ -8,7 +8,12 @@ import os
 from io import BytesIO
 from collections import defaultdict
 import calendar
-
+from .microsoft_graph_service import enviar_email_graph, criar_pasta_caso, criar_subpastas
+from notificacoes.servicos import preparar_notificacao # Vamos criar/renomear esta função
+from .models import FluxoTrabalho, FluxoInterno as FluxoInternoModel
+from django.contrib import messages
+from django.shortcuts import redirect
+from django.urls import reverse_lazy
 # Django Imports
 from django.conf import settings
 from django.contrib import messages
@@ -174,40 +179,89 @@ class CasoCreateView(LoginRequiredMixin, CreateView):
     model = Caso
     form_class = CasoCreateForm
     template_name = 'casos/caso_form_create.html'
+
     def form_valid(self, form):
+        # Salva o objeto do formulário, mas não o envia para o banco ainda
         self.object = form.save(commit=False)
+        
+        # Lógica para iniciar o workflow
         try:
             fluxo = FluxoTrabalho.objects.get(cliente=self.object.cliente, produto=self.object.produto)
             primeira_etapa = fluxo.etapas.order_by('ordem').first()
-            if primeira_etapa: self.object.etapa_atual = primeira_etapa
-            else: messages.warning(self.request, "Fluxo de trabalho aplicável não possui etapas.")
-        except FluxoTrabalho.DoesNotExist: messages.warning(self.request, "Nenhuma regra de fluxo de trabalho encontrada.")
+            if primeira_etapa:
+                self.object.etapa_atual = primeira_etapa
+            else:
+                messages.warning(self.request, "Fluxo de trabalho aplicável não possui etapas.")
+        except FluxoTrabalho.DoesNotExist:
+            messages.warning(self.request, "Nenhuma regra de fluxo de trabalho encontrada para este cliente e produto.")
+        
+        # Agora salva o objeto no banco para obter um ID
         self.object.save()
+        
+        # Inicia o fluxo se uma etapa foi definida
         if self.object.etapa_atual:
             _mudar_etapa_fluxo(self.request, self.object, self.object.etapa_atual)
             messages.info(self.request, f"Caso iniciado no fluxo '{self.object.etapa_atual.fluxo_trabalho.nome}'.")
+
+        # Lógica de integração com o SharePoint
         try:
-            nome_pasta_sanitizado = "".join(c if c not in r'<>:"/\|?*' else '-' for c in f"{self.object.id}")
+            nome_pasta_sanitizado = str(self.object.id)
             pasta_criada_json = criar_pasta_caso(nome_pasta_sanitizado)
             if pasta_criada_json:
-                self.object.sharepoint_folder_id, self.object.sharepoint_folder_url = pasta_criada_json['id'], pasta_criada_json['webUrl']
+                self.object.sharepoint_folder_id = pasta_criada_json['id']
+                self.object.sharepoint_folder_url = pasta_criada_json['webUrl']
                 self.object.save(update_fields=['sharepoint_folder_id', 'sharepoint_folder_url'])
+                
                 id_pasta_pai = pasta_criada_json['id']
                 subpastas = [p.nome_pasta for p in self.object.produto.estrutura_pastas.all()]
                 if subpastas:
                     subpastas_sanitizadas = ["".join(c if c not in r'<>:"/\|?*' else '-' for c in nome_sub) for nome_sub in subpastas]
                     criar_subpastas(id_pasta_pai, subpastas_sanitizadas)
                 messages.success(self.request, "Pasta do caso criada no SharePoint.")
-            else: messages.warning(self.request, "O caso foi criado, mas não foi possível criar a pasta no SharePoint.")
-        except Exception as e: messages.error(self.request, f"Falha na integração com SharePoint: {e}")
+            else:
+                messages.warning(self.request, "O caso foi criado, mas não foi possível criar a pasta no SharePoint.")
+        except Exception as e:
+            messages.error(self.request, f"Falha na integração com SharePoint: {e}")
+
+        # --- NOVA LÓGICA DE ENVIO DE E-MAIL VIA MICROSOFT GRAPH ---
         try:
+            # 1. Prepara o conteúdo do e-mail (assunto, corpo, destinatários)
             contexto_notificacao = {'caso': self.object, 'usuario_acao': self.request.user}
-            sucesso, mensagem = enviar_notificacao(slug_evento='novo-caso-criado', contexto=contexto_notificacao)
-            if sucesso: messages.info(self.request, "Notificações de novo caso enviadas.")
-            else: messages.warning(self.request, f"Não foi possível enviar notificações: {mensagem}")
-        except Exception as e: messages.error(self.request, f"Erro ao tentar enviar notificações: {e}")
+            sucesso_preparacao, dados_email = preparar_notificacao(slug_evento='novo-caso-criado', contexto=contexto_notificacao)
+
+            if sucesso_preparacao:
+                # 2. Envia o e-mail usando a conta do usuário logado
+                sucesso_envio, mensagem_envio = enviar_email_graph(
+                    usuario_remetente=self.request.user,
+                    destinatarios=dados_email['destinatarios'],
+                    assunto=dados_email['assunto'],
+                    corpo_html=dados_email['corpo']
+                )
+
+                if sucesso_envio:
+                    messages.info(self.request, "Notificação de novo caso enviada com sucesso pela sua conta Microsoft.")
+                    # 3. Registra a ação no Fluxo Interno
+                    FluxoInternoModel.objects.create(
+                        caso=self.object,
+                        data_fluxo=timezone.now().date(),
+                        descricao=f"[SISTEMA] E-mail de 'Novo Caso Criado' enviado para: {', '.join(dados_email['destinatarios'])}.",
+                        usuario_criacao=self.request.user
+                    )
+                else:
+                    messages.error(self.request, f"Falha ao enviar notificação via Microsoft: {mensagem_envio}")
+            else:
+                # 'dados_email' aqui contém a mensagem de erro da preparação
+                messages.warning(self.request, f"Não foi possível preparar as notificações: {dados_email}")
+
+        except Exception as e:
+            messages.error(self.request, f"Ocorreu um erro inesperado ao tentar enviar as notificações: {e}")
+        # --- FIM DA NOVA LÓGICA ---
+            
         return redirect(self.get_success_url())
-    def get_success_url(self): return reverse_lazy('casos:caso_update', kwargs={'pk': self.object.pk})
+
+    def get_success_url(self):
+        # Redireciona para a página de UPDATE, que é mais útil após a criação
+        return reverse_lazy('casos:caso_update', kwargs={'pk': self.object.pk})
 
 class CasoUpdateView(LoginRequiredMixin, UpdateView):
     model = Caso
