@@ -1,8 +1,9 @@
-# casos/microsoft_graph_service.py (COMPLETO E ATUALIZADO)
+# casos/microsoft_graph_service.py (COM CORREÇÃO DE SSL)
 
 import os
 import requests
 import msal
+import certifi # <<< IMPORTAÇÃO CRUCIAL ADICIONADA
 from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
@@ -10,7 +11,6 @@ from django.contrib.auth import get_user_model
 from allauth.socialaccount.models import SocialToken
 
 # --- CONFIGURAÇÕES GLOBAIS ---
-# (Mantive suas variáveis de ambiente e configurações existentes)
 TENANT_ID = os.environ.get('SHAREPOINT_TENANT_ID')
 CLIENT_ID = os.environ.get('SHAREPOINT_CLIENT_ID')
 CLIENT_SECRET = os.environ.get('SHAREPOINT_CLIENT_SECRET')
@@ -19,10 +19,11 @@ DRIVE_ID = os.environ.get('SHAREPOINT_DRIVE_ID')
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 SCOPES = ["https://graph.microsoft.com/.default"]
 
-# --- FUNÇÕES DE TOKEN (Aprimoradas) ---
+# --- FUNÇÕES DE TOKEN ---
 
 def get_app_graph_token():
-    """Obtém um token de acesso para a APLICAÇÃO (não para um usuário específico)."""
+    """Obtém um token de acesso para a APLICAÇÃO."""
+    # MSAL lida com SSL internamente, geralmente não precisa de ajuste aqui
     app = msal.ConfidentialClientApplication(CLIENT_ID, authority=AUTHORITY, client_credential=CLIENT_SECRET)
     result = app.acquire_token_for_client(scopes=SCOPES)
     if "access_token" in result:
@@ -30,10 +31,7 @@ def get_app_graph_token():
     raise Exception(f"Não foi possível obter o token de acesso da aplicação: {result.get('error_description')}")
 
 def get_user_graph_token(user):
-    """
-    Busca o token de acesso do Microsoft Graph para um usuário específico.
-    Tenta usar o token salvo e, se expirado, o renova.
-    """
+    """Busca o token de acesso do Microsoft Graph para um usuário específico."""
     try:
         social_token = SocialToken.objects.get(account__user=user, account__provider='microsoft')
         
@@ -44,7 +42,7 @@ def get_user_graph_token(user):
             )
             
             result = app.acquire_token_by_refresh_token(
-                social_token.token_secret, # O refresh_token é salvo em token_secret pelo allauth
+                social_token.token_secret, 
                 scopes=settings.SOCIALACCOUNT_PROVIDERS['microsoft']['SCOPE']
             )
 
@@ -67,17 +65,23 @@ def get_user_graph_token(user):
         print(f"Erro inesperado ao obter/renovar token do Graph para {user.username}: {e}")
         return None
 
-# --- FUNÇÕES DO SHAREPOINT (Seu código original, mantido) ---
+# --- FUNÇÕES DO SHAREPOINT (Com correção de SSL) ---
 
 def criar_pasta_caso(nome_pasta):
     access_token = get_app_graph_token()
     headers = {'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json'}
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/root/children"
     payload = {"name": nome_pasta, "folder": {}}
-    response = requests.post(url, headers=headers, json=payload)
-    if response.status_code == 201:
-        return response.json()
-    return None
+    try:
+        # Adicionado verify=certifi.where() e timeout
+        response = requests.post(url, headers=headers, json=payload, verify=certifi.where(), timeout=15)
+        if response.status_code == 201:
+            return response.json()
+        print(f"Erro ao criar pasta do caso: {response.status_code} - {response.text}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"Erro de requisição ao criar pasta do caso: {e}")
+        return None
 
 def criar_subpastas(id_pasta_pai, nomes_subpastas):
     access_token = get_app_graph_token()
@@ -86,11 +90,12 @@ def criar_subpastas(id_pasta_pai, nomes_subpastas):
         url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{id_pasta_pai}/children"
         payload = {"name": nome, "folder": {}}
         try:
-            # Adicionamos um timeout e verificação de SSL explícita
-            response = requests.post(url, headers=headers, json=payload, timeout=10, verify=True)
+            # Adicionado verify=certifi.where() e timeout
+            response = requests.post(url, headers=headers, json=payload, verify=certifi.where(), timeout=10)
             response.raise_for_status()
         except requests.exceptions.SSLError as e:
             print(f"!!! ERRO DE SSL AO CRIAR SUBPASTA '{nome}': {e}")
+            # Não relança o erro para tentar criar as outras pastas
         except requests.exceptions.RequestException as e:
             print(f"!!! ERRO DE REQUISIÇÃO AO CRIAR SUBPASTA '{nome}': {e}")
 
@@ -98,54 +103,75 @@ def listar_arquivos_e_pastas(folder_id):
     access_token = get_app_graph_token()
     headers = {'Authorization': 'Bearer ' + access_token}
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{folder_id}/children"
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json().get('value', [])
-    return []
+    try:
+        # Adicionado verify=certifi.where()
+        response = requests.get(url, headers=headers, verify=certifi.where(), timeout=15)
+        if response.status_code == 200:
+            return response.json().get('value', [])
+        return []
+    except requests.exceptions.RequestException:
+        return []
 
 def upload_arquivo(parent_folder_id, nome_arquivo, conteudo_arquivo):
     access_token = get_app_graph_token()
     headers = {'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/octet-stream'}
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{parent_folder_id}:/{nome_arquivo}:/content"
-    response = requests.put(url, headers=headers, data=conteudo_arquivo)
-    return response.status_code == 201
+    try:
+        # Adicionado verify=certifi.where()
+        response = requests.put(url, headers=headers, data=conteudo_arquivo, verify=certifi.where(), timeout=120) # Timeout maior para upload
+        return response.status_code == 201
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao fazer upload do arquivo: {e}")
+        return False
 
 def deletar_item(item_id):
     access_token = get_app_graph_token()
     headers = {'Authorization': 'Bearer ' + access_token}
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{item_id}"
-    response = requests.delete(url, headers=headers)
-    return response.status_code == 204
+    try:
+        # Adicionado verify=certifi.where()
+        response = requests.delete(url, headers=headers, verify=certifi.where(), timeout=15)
+        return response.status_code == 204
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao deletar item: {e}")
+        return False
 
 def criar_nova_pasta(parent_folder_id, nome_nova_pasta):
     access_token = get_app_graph_token()
     headers = {'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json'}
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{parent_folder_id}/children"
     payload = {"name": nome_nova_pasta, "folder": {}}
-    response = requests.post(url, headers=headers, json=payload)
-    return response.status_code == 201
+    try:
+        # Adicionado verify=certifi.where()
+        response = requests.post(url, headers=headers, json=payload, verify=certifi.where(), timeout=15)
+        return response.status_code == 201
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao criar nova pasta: {e}")
+        return False
 
 def obter_url_preview(item_id):
     access_token = get_app_graph_token()
     headers = {'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json'}
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{item_id}/preview"
-    response = requests.post(url, headers=headers, json={})
-    if response.status_code == 200:
-        return response.json().get('getUrl')
-    return None
+    try:
+        # Adicionado verify=certifi.where()
+        response = requests.post(url, headers=headers, json={}, verify=certifi.where(), timeout=15)
+        if response.status_code == 200:
+            return response.json().get('getUrl')
+        return None
+    except requests.exceptions.RequestException:
+        return None
 
 # ==============================================================================
-# NOVA FUNÇÃO DE ENVIO DE E-MAIL (PELO USUÁRIO)
+# FUNÇÃO DE ENVIO DE E-MAIL (Com correção de SSL)
 # ==============================================================================
 
 def enviar_email_graph(usuario_remetente, destinatarios, assunto, corpo_html):
-    """
-    Envia um e-mail usando a conta do Microsoft Graph do usuário logado.
-    """
+    """Envia um e-mail usando a conta do Microsoft Graph do usuário logado."""
     access_token = get_user_graph_token(usuario_remetente)
     if not access_token:
         print(f"Falha no envio de e-mail: não foi possível obter o token para {usuario_remetente.username}")
-        return False, "Não foi possível obter o token de autenticação do usuário."
+        return False, "Não foi possível obter o token de autenticação do usuário. Faça login com a Microsoft novamente."
 
     headers = {
         'Authorization': 'Bearer ' + access_token,
@@ -169,18 +195,23 @@ def enviar_email_graph(usuario_remetente, destinatarios, assunto, corpo_html):
     url = "https://graph.microsoft.com/v1.0/me/sendMail"
     
     try:
-        response = requests.post(url, headers=headers, json=email_data)
+        # Adicionado verify=certifi.where() e timeout
+        response = requests.post(url, headers=headers, json=email_data, verify=certifi.where(), timeout=20)
         response.raise_for_status()
         print(f"E-mail enviado com sucesso de {usuario_remetente.email} para {destinatarios}")
         return True, "E-mail enviado com sucesso."
+    except requests.exceptions.SSLError as e:
+        error_msg = f"Erro de segurança SSL ao enviar e-mail: {e}"
+        print(error_msg)
+        return False, "Falha de conexão segura com a Microsoft. Tente novamente."
     except requests.exceptions.RequestException as e:
         error_text = e.response.text if e.response else 'N/A'
         print(f"Erro ao enviar e-mail via Microsoft Graph: {e}")
         print(f"Resposta da API: {error_text}")
-        return False, f"Falha ao enviar e-mail via Microsoft: {error_text}"
+        return False, f"Falha ao enviar e-mail: {error_text}"
 
 # ==============================================================================
-# SUA FUNÇÃO DE SINCRONIZAÇÃO (Mantida e completa)
+# FUNÇÃO DE SINCRONIZAÇÃO (Com correção de SSL)
 # ==============================================================================
 
 def sincronizar_usuarios_azure():
@@ -194,8 +225,15 @@ def sincronizar_usuarios_azure():
         raise ValueError("Variáveis de ambiente (TENANT_ID, CLIENT_ID, CLIENT_SECRET) não configuradas.")
             
     authority = f"https://login.microsoftonline.com/{tenant_id}"
-    app = msal.ConfidentialClientApplication(client_id, authority=authority, client_credential=client_secret)
-    result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    
+    try:
+        app = msal.ConfidentialClientApplication(
+            client_id, authority=authority, client_credential=client_secret,
+            # MSAL pode aceitar um caminho de certificado, mas vamos deixar padrão por enquanto
+        )
+        result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    except Exception as e:
+        raise ConnectionError(f"Erro ao conectar com a Microsoft para obter token: {e}")
     
     if "access_token" not in result:
         error_details = result.get('error_description', 'Nenhum detalhe adicional.')
@@ -211,52 +249,59 @@ def sincronizar_usuarios_azure():
     total_azure = 0
     
     while url:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        
-        lista_usuarios_azure = data.get('value', [])
-        total_azure += len(lista_usuarios_azure)
-        
-        for user_data in lista_usuarios_azure:
-            email = user_data.get('mail') or user_data.get('userPrincipalName')
-            if not email:
-                continue
-
-            first_name = user_data.get('givenName')
-            last_name = user_data.get('surname')
-            display_name = user_data.get('displayName')
-
-            if not first_name and not last_name and display_name:
-                parts = display_name.split(' ')
-                first_name = parts[0]
-                if len(parts) > 1:
-                    last_name = ' '.join(parts[1:])
-
-            if not first_name:
-                first_name = email.split('@')[0]
+        try:
+            # Adicionado verify=certifi.where() e timeout
+            response = requests.get(url, headers=headers, verify=certifi.where(), timeout=30)
+            response.raise_for_status()
+            data = response.json()
             
-            if not last_name:
-                last_name = "(sobrenome não informado)"
+            lista_usuarios_azure = data.get('value', [])
+            total_azure += len(lista_usuarios_azure)
             
-            user, created = User.objects.update_or_create(
-                username=email.lower(),
-                defaults={
-                    'email': email.lower(),
-                    'first_name': first_name,
-                    'last_name': last_name,
-                    'is_active': True
-                }
-            )
+            for user_data in lista_usuarios_azure:
+                email = user_data.get('mail') or user_data.get('userPrincipalName')
+                if not email:
+                    continue
+
+                first_name = user_data.get('givenName')
+                last_name = user_data.get('surname')
+                display_name = user_data.get('displayName')
+
+                if not first_name and not last_name and display_name:
+                    parts = display_name.split(' ')
+                    first_name = parts[0]
+                    if len(parts) > 1:
+                        last_name = ' '.join(parts[1:])
+
+                if not first_name:
+                    first_name = email.split('@')[0]
+                
+                if not last_name:
+                    last_name = "(sobrenome não informado)"
+                
+                user, created = User.objects.update_or_create(
+                    username=email.lower(),
+                    defaults={
+                        'email': email.lower(),
+                        'first_name': first_name,
+                        'last_name': last_name,
+                        'is_active': True
+                    }
+                )
+                
+                if created:
+                    usuarios_criados += 1
+                    user.set_unusable_password() 
+                    user.save()
+                else:
+                    usuarios_atualizados += 1
             
-            if created:
-                usuarios_criados += 1
-                user.set_unusable_password() 
-                user.save()
-            else:
-                usuarios_atualizados += 1
-        
-        url = data.get('@odata.nextLink')
+            url = data.get('@odata.nextLink')
+            
+        except requests.exceptions.SSLError as e:
+            raise ConnectionError(f"Erro de segurança SSL ao sincronizar usuários: {e}")
+        except requests.exceptions.RequestException as e:
+            raise ConnectionError(f"Erro de rede ao sincronizar usuários: {e}")
         
     return (
         f"Sincronização concluída! "
