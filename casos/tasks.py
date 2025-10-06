@@ -1,11 +1,16 @@
-# casos/tasks.py
+# casos/tasks.py (CORRIGIDO)
 
 import time
 from celery import shared_task
 from django.contrib.auth import get_user_model
-from .models import GraphWebhookSubscription, EmailCaso, Caso
-from .microsoft_graph_service import get_access_token
 import requests
+
+# Importa os modelos necessários
+from .models import GraphWebhookSubscription, EmailCaso, Caso
+
+# --- A CORREÇÃO PRINCIPAL ESTÁ AQUI ---
+# Importa a função correta para obter o token da APLICAÇÃO
+from .microsoft_graph_service import get_app_graph_token
 
 User = get_user_model()
 
@@ -21,7 +26,8 @@ def processar_email_webhook(subscription_id, resource_id):
             print(f"CELERY TASK: Assinatura de webhook {subscription_id} não encontrada. Ignorando.")
             return
 
-        token = get_access_token()
+        # Usa a nova função de token
+        token = get_app_graph_token()
         if not token:
             print("CELERY TASK: Falha ao obter token de aplicativo.")
             return
@@ -68,10 +74,13 @@ def processar_email_webhook(subscription_id, resource_id):
 def buscar_detalhes_email_enviado(user_email, email_caso_id, para, assunto):
     time.sleep(10) 
     print(f"CELERY TASK: Buscando detalhes do e-mail enviado de '{user_email}' para '{para}'")
-    token = get_access_token()
+    
+    # Usa a nova função de token
+    token = get_app_graph_token()
     if not token:
         print("CELERY TASK: Falha ao obter token para buscar detalhes.")
         return
+        
     try:
         primeiro_destinatario = para.split(',')[0].strip()
         url = (
