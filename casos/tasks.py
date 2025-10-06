@@ -10,7 +10,7 @@ from .models import GraphWebhookSubscription, EmailCaso, Caso
 
 # --- A CORREÇÃO PRINCIPAL ESTÁ AQUI ---
 # Importa a função correta para obter o token da APLICAÇÃO
-from .microsoft_graph_service import get_app_graph_token
+from .microsoft_graph_service import get_app_graph_token, criar_pasta_caso, criar_subpastas
 
 User = get_user_model()
 
@@ -105,3 +105,29 @@ def buscar_detalhes_email_enviado(user_email, email_caso_id, para, assunto):
             print(f"CELERY TASK: E-mail enviado com assunto '{assunto}' não encontrado em 'Itens Enviados'.")
     except Exception as e:
         print(f"CELERY TASK: Erro ao buscar detalhes do e-mail enviado: {repr(e)}")
+
+
+@shared_task
+def criar_estrutura_sharepoint_async(caso_id):
+    try:
+        caso = Caso.objects.get(id=caso_id)
+        if not caso.produto: return
+
+        nome_pasta_sanitizado = str(caso.id)
+        pasta_criada_json = criar_pasta_caso(nome_pasta_sanitizado)
+
+        if pasta_criada_json:
+            caso.sharepoint_folder_id = pasta_criada_json['id']
+            caso.sharepoint_folder_url = pasta_criada_json['webUrl']
+            caso.save(update_fields=['sharepoint_folder_id', 'sharepoint_folder_url'])
+            
+            id_pasta_pai = pasta_criada_json['id']
+            subpastas = [p.nome_pasta for p in caso.produto.estrutura_pastas.all()]
+            if subpastas:
+                subpastas_sanitizadas = ["".join(c if c not in r'<>:"/\|?*' else '-' for c in nome_sub) for nome_sub in subpastas]
+                criar_subpastas(id_pasta_pai, subpastas_sanitizadas)
+            print(f"Estrutura do SharePoint criada para o Caso #{caso_id}")
+        else:
+            print(f"Falha ao criar pasta principal no SharePoint para o Caso #{caso_id}")
+    except Exception as e:
+        print(f"Erro na tarefa de criação de pasta do SharePoint: {e}")
