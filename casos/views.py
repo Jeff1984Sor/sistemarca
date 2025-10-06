@@ -4,6 +4,7 @@ import json
 from collections import defaultdict
 from datetime import date, timedelta
 from io import BytesIO
+from .tasks import criar_estrutura_sharepoint_async
 
 # --- Bibliotecas de Terceiros ---
 import openpyxl
@@ -257,34 +258,20 @@ class CasoCreateView(LoginRequiredMixin, CreateView):
             _mudar_etapa_fluxo(self.request, self.object, self.object.etapa_atual)
             messages.info(self.request, f"Caso iniciado no fluxo '{self.object.etapa_atual.fluxo_trabalho.nome}'.")
 
-        # Lógica de integração com o SharePoint
-        try:
-            nome_pasta_sanitizado = str(self.object.id)
-            pasta_criada_json = criar_pasta_caso(nome_pasta_sanitizado)
-            if pasta_criada_json:
-                self.object.sharepoint_folder_id = pasta_criada_json['id']
-                self.object.sharepoint_folder_url = pasta_criada_json['webUrl']
-                self.object.save(update_fields=['sharepoint_folder_id', 'sharepoint_folder_url'])
-                
-                id_pasta_pai = pasta_criada_json['id']
-                subpastas = [p.nome_pasta for p in self.object.produto.estrutura_pastas.all()]
-                if subpastas:
-                    subpastas_sanitizadas = ["".join(c if c not in r'<>:"/\|?*' else '-' for c in nome_sub) for nome_sub in subpastas]
-                    criar_subpastas(id_pasta_pai, subpastas_sanitizadas)
-                messages.success(self.request, "Pasta do caso criada no SharePoint.")
-            else:
-                messages.warning(self.request, "O caso foi criado, mas não foi possível criar a pasta no SharePoint.")
-        except Exception as e:
-            messages.error(self.request, f"Falha na integração com SharePoint: {e}")
+        # --- LÓGICA DO SHAREPOINT MOVIDA PARA SEGUNDO PLANO ---
+        # Dispara a tarefa do Celery para criar as pastas, passando o ID do caso
+        # O '.delay()' executa a tarefa de forma assíncrona
+        criar_estrutura_sharepoint_async.delay(self.object.id)
+        # Informa ao usuário que o processo começou
+        messages.info(self.request, "A criação da pasta no SharePoint foi iniciada e será concluída em segundo plano.")
+        # --- FIM DA MUDANÇA ---
 
-        # --- NOVA LÓGICA DE ENVIO DE E-MAIL VIA MICROSOFT GRAPH ---
+        # Lógica de envio de e-mail (continua como estava)
         try:
-            # 1. Prepara o conteúdo do e-mail (assunto, corpo, destinatários)
             contexto_notificacao = {'caso': self.object, 'usuario_acao': self.request.user}
             sucesso_preparacao, dados_email = preparar_notificacao(slug_evento='novo-caso-criado', contexto=contexto_notificacao)
 
             if sucesso_preparacao:
-                # 2. Envia o e-mail usando a conta do usuário logado
                 sucesso_envio, mensagem_envio = enviar_email_graph(
                     usuario_remetente=self.request.user,
                     destinatarios=dados_email['destinatarios'],
@@ -294,7 +281,6 @@ class CasoCreateView(LoginRequiredMixin, CreateView):
 
                 if sucesso_envio:
                     messages.info(self.request, "Notificação de novo caso enviada com sucesso pela sua conta Microsoft.")
-                    # 3. Registra a ação no Fluxo Interno
                     FluxoInternoModel.objects.create(
                         caso=self.object,
                         data_fluxo=timezone.now().date(),
@@ -304,12 +290,10 @@ class CasoCreateView(LoginRequiredMixin, CreateView):
                 else:
                     messages.error(self.request, f"Falha ao enviar notificação via Microsoft: {mensagem_envio}")
             else:
-                # 'dados_email' aqui contém a mensagem de erro da preparação
                 messages.warning(self.request, f"Não foi possível preparar as notificações: {dados_email}")
 
         except Exception as e:
             messages.error(self.request, f"Ocorreu um erro inesperado ao tentar enviar as notificações: {e}")
-        # --- FIM DA NOVA LÓGICA ---
             
         return redirect(self.get_success_url())
 
