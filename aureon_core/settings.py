@@ -180,4 +180,6 @@ WEBHOOK_BASE_URL = os.environ.get('WEBHOOK_BASE_URL')
 STATICFILES_DIRS = [BASE_DIR / 'static']
 SHAREPOINT_SITE_URL = "rcostaadvcombr.sharepoint.com"
 SHAREPOINT_DRIVE_ID = os.environ.get('SHAREPOINT_DRIVE_ID')
+SHAREPOINT_DOC_LIBRARY = "Documentos" # Ou o nome que você usa, ex: "Documentos Compartilhados"
+
 CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')

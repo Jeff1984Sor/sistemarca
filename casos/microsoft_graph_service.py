@@ -1,29 +1,33 @@
-# casos/microsoft_graph_service.py (COM CORREÇÃO DE SSL)
-
 import os
 import requests
 import msal
-import certifi # <<< IMPORTAÇÃO CRUCIAL ADICIONADA
+import certifi
 from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 from django.contrib.auth import get_user_model
 from allauth.socialaccount.models import SocialToken
 
+# --- NOVA ABORDAGEM: Importações da biblioteca Office365 ---
+from office365.runtime.auth.authentication_context import AuthenticationContext
+from office365.sharepoint.client_context import ClientContext
+# -----------------------------------------------------------
+
 # --- CONFIGURAÇÕES GLOBAIS ---
 TENANT_ID = os.environ.get('SHAREPOINT_TENANT_ID')
 CLIENT_ID = os.environ.get('SHAREPOINT_CLIENT_ID')
 CLIENT_SECRET = os.environ.get('SHAREPOINT_CLIENT_SECRET')
-DRIVE_ID = os.environ.get('SHAREPOINT_DRIVE_ID')
+DRIVE_ID = os.environ.get('SHAREPOINT_DRIVE_ID') # Ainda pode ser útil para outras funções
+SHAREPOINT_SITE_URL = settings.SHAREPOINT_SITE_URL # Ex: "seusite.sharepoint.com"
+SHAREPOINT_DOC_LIBRARY = "Documentos" # Nome da sua biblioteca de documentos principal
 
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 SCOPES = ["https://graph.microsoft.com/.default"]
 
-# --- FUNÇÕES DE TOKEN ---
+# --- FUNÇÕES DE TOKEN (Inalteradas) ---
 
 def get_app_graph_token():
-    """Obtém um token de acesso para a APLICAÇÃO."""
-    # MSAL lida com SSL internamente, geralmente não precisa de ajuste aqui
+    """Obtém um token de acesso para a APLICAÇÃO (não para um usuário específico)."""
     app = msal.ConfidentialClientApplication(CLIENT_ID, authority=AUTHORITY, client_credential=CLIENT_SECRET)
     result = app.acquire_token_for_client(scopes=SCOPES)
     if "access_token" in result:
@@ -40,12 +44,10 @@ def get_user_graph_token(user):
             app = msal.ConfidentialClientApplication(
                 CLIENT_ID, authority=AUTHORITY, client_credential=CLIENT_SECRET
             )
-            
             result = app.acquire_token_by_refresh_token(
                 social_token.token_secret, 
                 scopes=settings.SOCIALACCOUNT_PROVIDERS['microsoft']['SCOPE']
             )
-
             if "access_token" in result:
                 social_token.token = result['access_token']
                 social_token.token_secret = result.get('refresh_token', social_token.token_secret)
@@ -55,7 +57,6 @@ def get_user_graph_token(user):
             else:
                 print(f"Falha ao renovar token para {user.username}: {result.get('error_description')}")
                 return None
-        
         return social_token.token
     
     except SocialToken.DoesNotExist:
@@ -65,46 +66,57 @@ def get_user_graph_token(user):
         print(f"Erro inesperado ao obter/renovar token do Graph para {user.username}: {e}")
         return None
 
-# --- FUNÇÕES DO SHAREPOINT (Com correção de SSL) ---
+# ==============================================================================
+# FUNÇÕES DO SHAREPOINT (REESCRITAS COM A NOVA BIBLIOTECA)
+# ==============================================================================
+
+def get_sharepoint_context():
+    """Cria e retorna um contexto autenticado para interagir com o SharePoint."""
+    site_url = f"https://{SHAREPOINT_SITE_URL}"
+    auth_context = AuthenticationContext(url=site_url)
+    auth_context.acquire_token_for_app(client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
+    ctx = ClientContext(site_url, auth_context)
+    return ctx
 
 def criar_pasta_caso(nome_pasta):
-    access_token = get_app_graph_token()
-    headers = {'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json'}
-    url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/root/children"
-    payload = {"name": nome_pasta, "folder": {}}
+    """Cria a pasta principal para um caso na raiz da biblioteca de documentos."""
     try:
-        # Adicionado verify=certifi.where() e timeout
-        response = requests.post(url, headers=headers, json=payload, verify=certifi.where(), timeout=15)
-        if response.status_code == 201:
-            return response.json()
-        print(f"Erro ao criar pasta do caso: {response.status_code} - {response.text}")
-        return None
-    except requests.exceptions.RequestException as e:
-        print(f"Erro de requisição ao criar pasta do caso: {e}")
+        ctx = get_sharepoint_context()
+        lib_documentos = ctx.web.lists.get_by_title(SHAREPOINT_DOC_LIBRARY).root_folder
+        nova_pasta = lib_documentos.folders.add(nome_pasta).execute_query()
+        print(f"Pasta principal '{nome_pasta}' criada com sucesso.")
+        return {
+            "id": nova_pasta.unique_id,
+            "webUrl": nova_pasta.serverRelativeUrl 
+        }
+    except Exception as e:
+        print(f"ERRO [Office365 Lib] ao criar pasta principal: {e}")
         return None
 
 def criar_subpastas(id_pasta_pai, nomes_subpastas):
-    access_token = get_app_graph_token()
-    headers = {'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json'}
-    for nome in nomes_subpastas:
-        url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{id_pasta_pai}/children"
-        payload = {"name": nome, "folder": {}}
-        try:
-            # Adicionado verify=certifi.where() e timeout
-            response = requests.post(url, headers=headers, json=payload, verify=certifi.where(), timeout=10)
-            response.raise_for_status()
-        except requests.exceptions.SSLError as e:
-            print(f"!!! ERRO DE SSL AO CRIAR SUBPASTA '{nome}': {e}")
-            # Não relança o erro para tentar criar as outras pastas
-        except requests.exceptions.RequestException as e:
-            print(f"!!! ERRO DE REQUISIÇÃO AO CRIAR SUBPASTA '{nome}': {e}")
+    """Cria subpastas dentro de uma pasta pai, usando o ID único da pasta."""
+    try:
+        ctx = get_sharepoint_context()
+        pasta_pai = ctx.web.get_folder_by_id(id_pasta_pai)
+        
+        for nome in nomes_subpastas:
+            pasta_pai.folders.add(nome)
+        
+        ctx.execute_query()
+        print(f"Subpastas {nomes_subpastas} criadas com sucesso dentro da pasta ID {id_pasta_pai}.")
+        return True
+    except Exception as e:
+        print(f"ERRO [Office365 Lib] ao criar subpastas: {e}")
+        return False
+
+# --- FUNÇÕES ANTIGAS (Mantidas por enquanto para não quebrar o resto do código) ---
+# --- Idealmente, estas também seriam migradas para a nova biblioteca ---
 
 def listar_arquivos_e_pastas(folder_id):
     access_token = get_app_graph_token()
     headers = {'Authorization': 'Bearer ' + access_token}
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{folder_id}/children"
     try:
-        # Adicionado verify=certifi.where()
         response = requests.get(url, headers=headers, verify=certifi.where(), timeout=15)
         if response.status_code == 200:
             return response.json().get('value', [])
@@ -117,8 +129,7 @@ def upload_arquivo(parent_folder_id, nome_arquivo, conteudo_arquivo):
     headers = {'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/octet-stream'}
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{parent_folder_id}:/{nome_arquivo}:/content"
     try:
-        # Adicionado verify=certifi.where()
-        response = requests.put(url, headers=headers, data=conteudo_arquivo, verify=certifi.where(), timeout=120) # Timeout maior para upload
+        response = requests.put(url, headers=headers, data=conteudo_arquivo, verify=certifi.where(), timeout=120)
         return response.status_code == 201
     except requests.exceptions.RequestException as e:
         print(f"Erro ao fazer upload do arquivo: {e}")
@@ -129,7 +140,6 @@ def deletar_item(item_id):
     headers = {'Authorization': 'Bearer ' + access_token}
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{item_id}"
     try:
-        # Adicionado verify=certifi.where()
         response = requests.delete(url, headers=headers, verify=certifi.where(), timeout=15)
         return response.status_code == 204
     except requests.exceptions.RequestException as e:
@@ -142,7 +152,6 @@ def criar_nova_pasta(parent_folder_id, nome_nova_pasta):
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{parent_folder_id}/children"
     payload = {"name": nome_nova_pasta, "folder": {}}
     try:
-        # Adicionado verify=certifi.where()
         response = requests.post(url, headers=headers, json=payload, verify=certifi.where(), timeout=15)
         return response.status_code == 201
     except requests.exceptions.RequestException as e:
@@ -154,7 +163,6 @@ def obter_url_preview(item_id):
     headers = {'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json'}
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{item_id}/preview"
     try:
-        # Adicionado verify=certifi.where()
         response = requests.post(url, headers=headers, json={}, verify=certifi.where(), timeout=15)
         if response.status_code == 200:
             return response.json().get('getUrl')
@@ -163,52 +171,28 @@ def obter_url_preview(item_id):
         return None
 
 # ==============================================================================
-# FUNÇÃO DE ENVIO DE E-MAIL (Com correção de SSL)
+# FUNÇÃO DE ENVIO DE E-MAIL (Inalterada)
 # ==============================================================================
 
 def enviar_email_graph(usuario_remetente, destinatarios, assunto, corpo_html):
-    """Envia um e-mail usando a conta do Microsoft Graph do usuário logado."""
     access_token = get_user_graph_token(usuario_remetente)
     if not access_token:
         print(f"Falha no envio de e-mail: não foi possível obter o token para {usuario_remetente.username}")
         return False, "Não foi possível obter o token de autenticação do usuário. Faça login com a Microsoft novamente."
-
-    headers = {
-        'Authorization': 'Bearer ' + access_token,
-        'Content-Type': 'application/json'
-    }
-    
+    headers = {'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json'}
     to_recipients = [{'emailAddress': {'address': email.strip()}} for email in destinatarios]
-
-    email_data = {
-        'message': {
-            'subject': assunto,
-            'body': {
-                'contentType': 'HTML',
-                'content': corpo_html
-            },
-            'toRecipients': to_recipients
-        },
-        'saveToSentItems': 'true'
-    }
-    
+    email_data = {'message': {'subject': assunto, 'body': {'contentType': 'HTML', 'content': corpo_html}, 'toRecipients': to_recipients}, 'saveToSentItems': 'true'}
     url = "https://graph.microsoft.com/v1.0/me/sendMail"
-    
     try:
-        # Adicionado verify=certifi.where() e timeout
         response = requests.post(url, headers=headers, json=email_data, verify=certifi.where(), timeout=20)
         response.raise_for_status()
         print(f"E-mail enviado com sucesso de {usuario_remetente.email} para {destinatarios}")
         return True, "E-mail enviado com sucesso."
-    except requests.exceptions.SSLError as e:
-        error_msg = f"Erro de segurança SSL ao enviar e-mail: {e}"
-        print(error_msg)
-        return False, "Falha de conexão segura com a Microsoft. Tente novamente."
     except requests.exceptions.RequestException as e:
         error_text = e.response.text if e.response else 'N/A'
         print(f"Erro ao enviar e-mail via Microsoft Graph: {e}")
         print(f"Resposta da API: {error_text}")
-        return False, f"Falha ao enviar e-mail: {error_text}"
+        return False, f"Falha ao enviar e-mail via Microsoft: {error_text}"
 
 # ==============================================================================
 # FUNÇÃO DE SINCRONIZAÇÃO (Com correção de SSL)
