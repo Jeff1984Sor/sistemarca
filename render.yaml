@@ -1,6 +1,6 @@
 services:
   # --- 1. Seu Banco de Dados PostgreSQL ---
-  - type: psql
+  - type: postgres
     name: rcostasystem-db
     databaseName: rcostasystem
     user: rcostasystem_user
