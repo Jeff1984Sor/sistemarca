@@ -244,7 +244,7 @@ class CasoUpdateView(LoginRequiredMixin, UpdateView):
     def get_success_url(self): return reverse_lazy('casos:caso_detail', kwargs={'pk': self.object.pk})
 
 class CasoDetailView(LoginRequiredMixin, DetailView):
-    model = models.Caso
+    model = Caso
     template_name = 'casos/caso_detail.html'
     context_object_name = 'caso'
 
